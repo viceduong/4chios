@@ -64,6 +64,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.viceduong.ch4ios.refresh
         NSCameraUsageDescription: 4chios uses the camera so you can attach a photo to a post.
         NSPhotoLibraryUsageDescription: 4chios needs access to your photos so you can attach an image to a post.
         NSPhotoLibraryAddUsageDescription: 4chios saves images and videos you choose to your photo library.

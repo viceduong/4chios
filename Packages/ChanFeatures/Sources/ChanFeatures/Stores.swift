@@ -217,6 +217,8 @@ public final class ThreadStore: ObservableObject {
             let replies = posts.first(where: { $0.isOP })?.replies ?? 0
             try? environment.database.addWatch(board: board, op: op)
             try? environment.database.updateWatchProgress(board: board, op: op, replies: replies)
+            BackgroundRefresher.requestAuthorization()
+            BackgroundRefresher.schedule()
         }
         refreshUserState()
     }
