@@ -11,7 +11,7 @@ public enum PostHTMLParser {
         return parser.parse(html)
     }
 
-    private struct Parser {
+    struct Parser {
         private var runs: [PostRun] = []
         private var buffer = ""
         private var style: PostStyle = []
