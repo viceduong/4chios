@@ -11,8 +11,8 @@ public final class ChanGIFView: UIView {
     private let gifView = GIFImageView()
     private var currentURL: URL?
 
-    public var contentMode: UIView.ContentMode = .scaleAspectFit {
-        didSet { gifView.contentMode = contentMode }
+    public var imageContentMode: UIView.ContentMode = .scaleAspectFit {
+        didSet { gifView.contentMode = imageContentMode }
     }
 
     public override init(frame: CGRect) {
@@ -28,7 +28,7 @@ public final class ChanGIFView: UIView {
     private func setUp() {
         clipsToBounds = true
         gifView.translatesAutoresizingMaskIntoConstraints = false
-        gifView.contentMode = contentMode
+        gifView.contentMode = imageContentMode
         addSubview(gifView)
         NSLayoutConstraint.activate([
             gifView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -64,12 +64,12 @@ public struct ChanGIFImage: UIViewRepresentable {
 
     public func makeUIView(context: Context) -> ChanGIFView {
         let view = ChanGIFView()
-        view.contentMode = contentMode
+        view.imageContentMode = contentMode
         return view
     }
 
     public func updateUIView(_ view: ChanGIFView, context: Context) {
-        view.contentMode = contentMode
+        view.imageContentMode = contentMode
         view.load(url)
     }
 
