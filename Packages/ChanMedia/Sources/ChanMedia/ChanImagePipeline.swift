@@ -28,16 +28,19 @@ public enum ChanImagePipeline {
     }()
 
     /// Prefetches a batch of URLs, e.g. the next screenful of a catalog.
-    public static func prefetch(_ urls: [URL], priority: ImageRequest.Priority = .low) {
+    public static func prefetch(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        shared.startPrefetching(with: urls.map { ImageRequest(url: $0, priority: priority) })
+        prefetcher.startPrefetching(with: urls)
     }
 
     /// Cancels prefetching for URLs that scrolled out of range.
     public static func stopPrefetching(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        shared.stopPrefetching(with: urls)
+        prefetcher.stopPrefetching(with: urls)
     }
+
+    /// Shared prefetcher; Nuke coalesces and prioritises requests internally.
+    public static let prefetcher = ImagePrefetcher(pipeline: shared)
 
     /// Wipes both caches. Used by the "clear image cache" settings row.
     public static func clearCaches() {
