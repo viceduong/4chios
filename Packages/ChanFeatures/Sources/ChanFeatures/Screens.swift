@@ -70,6 +70,17 @@ public struct CatalogScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .background(theme.background.ignoresSafeArea())
         .background(threadLink)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    settings.toggleFavorite(store.board)
+                    ChanHaptics.tap()
+                } label: {
+                    Image(systemName: settings.isFavorite(store.board) ? "star.fill" : "star")
+                }
+                .tint(theme.accent)
+            }
+        }
         .task { await store.loadIfNeeded() }
         .overlay(alignment: .center) { emptyState }
     }
@@ -127,7 +138,36 @@ public struct ThreadScreen: View {
         .navigationTitle("#\(store.op.value)")
         .navigationBarTitleDisplayMode(.inline)
         .background(theme.background.ignoresSafeArea())
-        .task { await store.loadIfNeeded() }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 16) {
+                    Button {
+                        store.toggleWatch()
+                        ChanHaptics.tap()
+                    } label: {
+                        Image(systemName: store.isWatched ? "eye.fill" : "eye")
+                    }
+                    Button {
+                        store.toggleBookmark()
+                        ChanHaptics.tap()
+                    } label: {
+                        Image(systemName: store.isBookmarked ? "bookmark.fill" : "bookmark")
+                    }
+                }
+                .tint(theme.accent)
+            }
+        }
+        .task {
+            await store.loadIfNeeded()
+            store.refreshUserState()
+
+            // Live thread: poll the tail endpoint while the screen is visible.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard !Task.isCancelled else { break }
+                await store.pollForNewPosts()
+            }
+        }
         .sheet(item: $mediaPost) { post in
             MediaViewerScreen(board: store.board, post: post)
         }

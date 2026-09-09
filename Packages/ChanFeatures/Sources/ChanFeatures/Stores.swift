@@ -190,4 +190,127 @@ public final class ThreadStore: ObservableObject {
     public func markRead(upTo number: PostNumber) throws {
         try environment.database.setLastRead(board: board, op: op, postNumber: number)
     }
+
+    // MARK: - User state
+
+    @Published public private(set) var isBookmarked = false
+    @Published public private(set) var isWatched = false
+
+    public func refreshUserState() {
+        isBookmarked = (try? environment.database.isBookmarked(board: board, op: op)) ?? false
+        isWatched = (try? environment.database.isWatched(board: board, op: op)) ?? false
+    }
+
+    public func toggleBookmark() {
+        if isBookmarked {
+            try? environment.database.removeBookmark(board: board, op: op)
+        } else {
+            try? environment.database.addBookmark(board: board, op: op)
+        }
+        refreshUserState()
+    }
+
+    public func toggleWatch() {
+        if isWatched {
+            try? environment.database.removeWatch(board: board, op: op)
+        } else {
+            let replies = posts.first(where: { $0.isOP })?.replies ?? 0
+            try? environment.database.addWatch(board: board, op: op)
+            try? environment.database.updateWatchProgress(board: board, op: op, replies: replies)
+        }
+        refreshUserState()
+    }
+
+    /// A snapshot of the OP, used by the saved list.
+    public var opPost: Post? {
+        posts.first(where: { $0.isOP })
+    }
+}
+
+/// A thread reference resolved into displayable content for the saved list.
+public struct SavedThread: Identifiable, Hashable, Sendable {
+    public var id: String { "\(board.rawValue)/\(op.value)" }
+    public let board: BoardID
+    public let op: PostNumber
+    public let title: String
+    public let replies: Int
+    public let images: Int
+    public let addedAt: Date
+    public let note: String?
+    public let isWatched: Bool
+    public let unreadReplies: Int
+}
+
+/// Bookmarks and watched threads, resolved against the cached posts.
+@MainActor
+public final class SavedStore: ObservableObject {
+    @Published public private(set) var bookmarks: [SavedThread] = []
+    @Published public private(set) var watched: [SavedThread] = []
+
+    private let environment: AppEnvironment
+
+    public init(environment: AppEnvironment) {
+        self.environment = environment
+    }
+
+    public func load() {
+        bookmarks = ((try? environment.database.bookmarks()) ?? []).map { bookmark in
+            resolve(
+                board: bookmark.board,
+                op: bookmark.op,
+                addedAt: bookmark.addedAt,
+                note: bookmark.note,
+                isWatched: false,
+                lastSeenReply: nil
+            )
+        }
+
+        watched = ((try? environment.database.watchedThreads()) ?? []).map { watch in
+            resolve(
+                board: watch.board,
+                op: watch.op,
+                addedAt: watch.addedAt,
+                note: nil,
+                isWatched: true,
+                lastSeenReply: watch.lastSeenReply
+            )
+        }
+    }
+
+    public func remove(_ thread: SavedThread) {
+        if thread.isWatched {
+            try? environment.database.removeWatch(board: thread.board, op: thread.op)
+        } else {
+            try? environment.database.removeBookmark(board: thread.board, op: thread.op)
+        }
+        load()
+    }
+
+    private func resolve(
+        board: BoardID,
+        op: PostNumber,
+        addedAt: Date,
+        note: String?,
+        isWatched: Bool,
+        lastSeenReply: Int?
+    ) -> SavedThread {
+        let opPost = (try? environment.database.posts(board: board, op: op))?.first(where: { $0.isOP })
+        let subject = opPost?.subject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = PostHTMLParser.parse(opPost?.commentHTML ?? "").plainText
+        let title = (subject?.isEmpty == false ? subject : nil)
+            ?? (body.isEmpty ? "Thread #\(op.value)" : String(body.prefix(80)))
+
+        let replies = opPost?.replies ?? 0
+        return SavedThread(
+            board: board,
+            op: op,
+            title: title,
+            replies: replies,
+            images: opPost?.images ?? 0,
+            addedAt: addedAt,
+            note: note,
+            isWatched: isWatched,
+            unreadReplies: max(0, replies - (lastSeenReply ?? 0))
+        )
+    }
 }

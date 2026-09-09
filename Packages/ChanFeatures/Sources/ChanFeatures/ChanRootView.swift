@@ -15,21 +15,36 @@ public struct ChanRootView: View {
     public init() {}
 
     public var body: some View {
-        NavigationView {
-            BoardListView(store: boardStore, settings: settings)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            ChanHaptics.tap()
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
+        TabView {
+            NavigationView {
+                BoardListView(store: boardStore, settings: settings)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                ChanHaptics.tap()
+                                showSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .tint(theme.accent)
                         }
-                        .tint(theme.accent)
                     }
-                }
+            }
+            .navigationViewStyle(.stack)
+            .tabItem { Label("Boards", systemImage: "list.bullet") }
+
+            NavigationView {
+                SavedScreen()
+            }
+            .navigationViewStyle(.stack)
+            .tabItem { Label("Saved", systemImage: "bookmark") }
+
+            NavigationView {
+                SearchScreen()
+            }
+            .navigationViewStyle(.stack)
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
         }
-        .navigationViewStyle(.stack)
         .environment(\.chanTheme, settings.theme(for: colorScheme))
         .tint(settings.theme(for: colorScheme).accent)
         .sheet(isPresented: $showSettings) {

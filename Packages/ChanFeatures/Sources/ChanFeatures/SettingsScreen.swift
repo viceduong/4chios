@@ -54,6 +54,12 @@ public struct SettingsScreen: View {
                     }
                 }
 
+                Section("Filters") {
+                    NavigationLink(destination: FiltersScreen()) {
+                        Label("Content filters", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                }
+
                 Section("Cache") {
                     Button(cacheCleared ? "Image cache cleared" : "Clear image cache") {
                         ChanImagePipeline.clearCaches()
