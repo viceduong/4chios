@@ -10,7 +10,7 @@ let package = Package(
     dependencies: [
         .package(path: "../ChanCore"),
         .package(url: "https://github.com/kean/Nuke", from: "12.8.0"),
-        .package(url: "https://github.com/kaishin/Gifu.git", from: "4.0.0"),
+        .package(url: "https://github.com/kaishin/Gifu.git", "3.4.0"..<"4.0.0"),
     ],
     targets: [
         .target(
