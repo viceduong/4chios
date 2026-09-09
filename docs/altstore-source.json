@@ -1,0 +1,38 @@
+{
+  "name": "4chios",
+  "subtitle": "Native, offline-first imageboard client",
+  "description": "A native iOS 15.6.1+ client with offline caching, live threads, filters, search, and posting.",
+  "iconURL": "https://github.com/viceduong.png",
+  "website": "https://github.com/viceduong/4chios",
+  "tintColor": "#6FBF73",
+  "featuredApps": [
+    "com.viceduong.ch4ios"
+  ],
+  "apps": [
+    {
+      "name": "4chios",
+      "bundleIdentifier": "com.viceduong.ch4ios",
+      "developerName": "viceduong",
+      "subtitle": "Native, offline-first imageboard client",
+      "localizedDescription": "Boards, catalogs, threads, live tail updates, GIF/mp4/webm playback, offline SQLite cache, full-text search, filters, bookmarks, watchlist notifications, and native posting with captcha or 4chan Pass.",
+      "iconURL": "https://github.com/viceduong.png",
+      "tintColor": "#6FBF73",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "buildVersion": "1",
+          "date": "2026-09-09",
+          "downloadURL": "https://github.com/viceduong/4chios/releases/download/v0.1.0/Ch4ios.ipa",
+          "size": 51689505,
+          "minOSVersion": "15.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      }
+    }
+  ],
+  "news": []
+}
