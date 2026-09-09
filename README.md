@@ -4,8 +4,22 @@ A native, offline-first imageboard client for **iOS 15.6.1+**, built with SwiftU
 Aiming for Apollo-for-Reddit polish: smooth 60/120 fps scrolling, a real local database,
 4chan-X-grade filters, live threads, and native posting.
 
-> **Status:** M0 — scaffold + CI. Nothing user-facing yet.
+> **Status:** `0.1.0` — feature-complete read + post client. CI green.
 > Full design lives in [`docs/PLAN.md`](docs/PLAN.md).
+
+## Features
+
+- **Boards** — full board list, search, favorites, work-safe badges
+- **Catalog** — two-column card grid with thumbnails, reply/image counts, sticky/closed badges
+- **Threads** — self-sizing post timeline, greentext, spoilers, code blocks, quote links that jump and flash
+- **Live** — tail-API polling every 20s, incremental inserts, no scroll jumps
+- **Media** — Nuke pipeline (memory + disk), animated GIF, pinch-zoom viewer, native mp4, **webm via VLCKit**
+- **Offline** — every board/thread you open is cached in SQLite (GRDB); images cached on disk
+- **Saved** — bookmarks + watchlist with unread reply counts and background notifications
+- **Search** — instant offline full-text search (SQLite FTS5)
+- **Filters** — keyword/regex/poster ID/tripcode/capcode/filename rules, per board or global
+- **Posting** — replies and new threads, native captcha (drag + type) and 4chan Pass, photo attachments
+- **Craft** — light/dark/OLED themes, adjustable type size, haptics, Dynamic Type, iOS 15 navigation backport
 
 ![CI](https://github.com/viceduong/4chios/actions/workflows/ci.yml/badge.svg)
 
