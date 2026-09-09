@@ -75,7 +75,7 @@ public final class ChanSettings: ObservableObject {
         themeMode = ThemeMode(rawValue: defaults.string(forKey: Keys.themeMode) ?? "") ?? .system
         let storedSize = defaults.double(forKey: Keys.fontSize)
         fontSize = storedSize > 0 ? CGFloat(storedSize) : 15
-        favoriteBoards = (defaults.stringArray(forKey: Keys.favoriteBoards) ?? []).map(BoardID.init)
+        favoriteBoards = (defaults.stringArray(forKey: Keys.favoriteBoards) ?? []).map { BoardID($0) }
         showThumbnails = defaults.object(forKey: Keys.showThumbnails) as? Bool ?? true
     }
 
