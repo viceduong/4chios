@@ -54,7 +54,7 @@ public actor ChanRateLimiter {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
             next.continuation.resume()
-            await self.finish()
+            self.finish()
         }
     }
 

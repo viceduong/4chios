@@ -141,12 +141,13 @@ public extension ChanDatabase {
     }
 
     func lastRead(board: BoardID, op: PostNumber) throws -> PostNumber? {
-        try writer.read { db in
-            try Int.fetchOne(
+        try writer.read { db -> PostNumber? in
+            let value = try Int.fetchOne(
                 db,
                 sql: "SELECT last_read_no FROM read_state WHERE board_id = ? AND op_no = ?",
                 arguments: [board.rawValue, op.value]
-            ).map(PostNumber.init)
+            )
+            return value.map { PostNumber($0) }
         }
     }
 
@@ -205,7 +206,7 @@ public extension ChanDatabase {
                       let action = ChanFilterAction(rawValue: row["action"]) else { return nil }
                 return ChanFilter(
                     id: row["id"],
-                    board: boardID.map(BoardID.init),
+                    board: boardID.map { BoardID($0) },
                     kind: kind,
                     pattern: row["pattern"],
                     action: action,

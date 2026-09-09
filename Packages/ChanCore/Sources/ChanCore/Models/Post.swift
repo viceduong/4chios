@@ -196,10 +196,10 @@ public struct Post: Codable, Hashable, Sendable, Identifiable {
         height = try c.decodeIfPresent(Int.self, forKey: .h)
         thumbnailWidth = try c.decodeIfPresent(Int.self, forKey: .thumbnailWidth)
         thumbnailHeight = try c.decodeIfPresent(Int.self, forKey: .thumbnailHeight)
-        isSpoiler = try c.decodeIfPresent(Bool.self, forKey: .spoiler)
+        isSpoiler = try c.decodeIfPresent(LenientBool.self, forKey: .spoiler)?.value
         customSpoiler = try c.decodeIfPresent(Int.self, forKey: .customSpoiler)
-        hasMidSizeImage = try c.decodeIfPresent(Bool.self, forKey: .hasMidSizeImage)
-        isFileDeleted = try c.decodeIfPresent(Bool.self, forKey: .isFileDeleted)
+        hasMidSizeImage = try c.decodeIfPresent(LenientBool.self, forKey: .hasMidSizeImage)?.value
+        isFileDeleted = try c.decodeIfPresent(LenientBool.self, forKey: .isFileDeleted)?.value
 
         replies = try c.decodeIfPresent(Int.self, forKey: .replies)
         images = try c.decodeIfPresent(Int.self, forKey: .images)
@@ -208,11 +208,11 @@ public struct Post: Codable, Hashable, Sendable, Identifiable {
         } else {
             lastModified = nil
         }
-        isSticky = try c.decodeIfPresent(Bool.self, forKey: .sticky)
-        isClosed = try c.decodeIfPresent(Bool.self, forKey: .closed)
-        isArchived = try c.decodeIfPresent(Bool.self, forKey: .archived)
-        isBumpLimit = try c.decodeIfPresent(Bool.self, forKey: .bumplimit)
-        isImageLimit = try c.decodeIfPresent(Bool.self, forKey: .imagelimit)
+        isSticky = try c.decodeIfPresent(LenientBool.self, forKey: .sticky)?.value
+        isClosed = try c.decodeIfPresent(LenientBool.self, forKey: .closed)?.value
+        isArchived = try c.decodeIfPresent(LenientBool.self, forKey: .archived)?.value
+        isBumpLimit = try c.decodeIfPresent(LenientBool.self, forKey: .bumplimit)?.value
+        isImageLimit = try c.decodeIfPresent(LenientBool.self, forKey: .imagelimit)?.value
         uniqueIPs = try c.decodeIfPresent(Int.self, forKey: .uniqueIPs)
         semanticURL = try c.decodeIfPresent(String.self, forKey: .semanticURL)
     }

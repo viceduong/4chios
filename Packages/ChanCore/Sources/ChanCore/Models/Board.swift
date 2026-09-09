@@ -34,6 +34,21 @@ public struct Board: Codable, Hashable, Sendable, Identifiable {
     public struct Meta: Codable, Hashable, Sendable {
         public let isArchived: Bool?
         public let isLocked: Bool?
+
+        public init(isArchived: Bool? = nil, isLocked: Bool? = nil) {
+            self.isArchived = isArchived
+            self.isLocked = isLocked
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            isArchived = try container.decodeIfPresent(LenientBool.self, forKey: .isArchived)?.value
+            isLocked = try container.decodeIfPresent(LenientBool.self, forKey: .isLocked)?.value
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case isArchived, isLocked
+        }
     }
 
     // Convenience accessors with sane defaults.
@@ -82,6 +97,33 @@ public struct Board: Codable, Hashable, Sendable, Identifiable {
         self.countryFlags = countryFlags
         self.cooldowns = cooldowns
         self.meta = meta
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        board = BoardID(try container.decode(String.self, forKey: .board))
+        title = try container.decode(String.self, forKey: .title)
+        wsBoard = try container.decodeIfPresent(LenientBool.self, forKey: .wsBoard)?.value
+        perPage = try container.decodeIfPresent(Int.self, forKey: .perPage)
+        pages = try container.decodeIfPresent(Int.self, forKey: .pages)
+        bumpLimit = try container.decodeIfPresent(Int.self, forKey: .bumpLimit)
+        imageLimit = try container.decodeIfPresent(Int.self, forKey: .imageLimit)
+        maxFilesize = try container.decodeIfPresent(Int.self, forKey: .maxFilesize)
+        maxWebmFilesize = try container.decodeIfPresent(Int.self, forKey: .maxWebmFilesize)
+        maxWebmDuration = try container.decodeIfPresent(Int.self, forKey: .maxWebmDuration)
+        maxCommentChars = try container.decodeIfPresent(Int.self, forKey: .maxCommentChars)
+        spoilers = try container.decodeIfPresent(LenientBool.self, forKey: .spoilers)?.value
+        customSpoilers = try container.decodeIfPresent(Int.self, forKey: .customSpoilers)
+        userIds = try container.decodeIfPresent(LenientBool.self, forKey: .userIds)?.value
+        countryFlags = try container.decodeIfPresent(LenientBool.self, forKey: .countryFlags)?.value
+        cooldowns = try container.decodeIfPresent(Cooldowns.self, forKey: .cooldowns)
+        meta = try container.decodeIfPresent(Meta.self, forKey: .meta)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case board, title, wsBoard, perPage, pages, bumpLimit, imageLimit, maxFilesize
+        case maxWebmFilesize, maxWebmDuration, maxCommentChars, spoilers, customSpoilers
+        case userIds, countryFlags, cooldowns, meta
     }
 }
 

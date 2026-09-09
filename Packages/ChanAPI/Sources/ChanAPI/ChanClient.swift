@@ -56,7 +56,7 @@ public struct ChanClient: Sendable {
     /// Archived thread numbers for a board.
     public func archive(_ board: BoardID) async throws -> [PostNumber] {
         let data = try await data(for: .archive(board), priority: .background)
-        return try decode([Int].self, from: data).map(PostNumber.init)
+        return try decode([Int].self, from: data).map { PostNumber($0) }
     }
 
     // MARK: - Transport

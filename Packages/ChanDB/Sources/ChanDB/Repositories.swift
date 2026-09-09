@@ -129,13 +129,13 @@ public extension ChanDatabase {
 
     /// The highest post number cached for a thread, or nil.
     func lastPostNumber(board: BoardID, op: PostNumber) throws -> PostNumber? {
-        try writer.read { db in
+        try writer.read { db -> PostNumber? in
             let value = try Int.fetchOne(
                 db,
                 sql: "SELECT MAX(no) FROM post WHERE board_id = ? AND op_no = ?",
                 arguments: [board.rawValue, op.value]
             )
-            return value.map(PostNumber.init)
+            return value.map { PostNumber($0) }
         }
     }
 
