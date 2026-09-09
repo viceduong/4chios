@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ChanCore, ChanAPI, ChanDB]
+        package: [ChanCore, ChanAPI]
     steps:
       - uses: actions/checkout@v5
 
@@ -34,11 +34,9 @@ jobs:
         with:
           swift-version: "6.0"
 
-      - name: Install SQLite headers (GRDB)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libsqlite3-dev
-
+      # ChanDB is deliberately absent here: GRDB references the SQLite snapshot
+      # API, which Ubuntu's libsqlite3 does not build (SQLITE_ENABLE_SNAPSHOT).
+      # It runs on the macOS runner below instead.
       - name: swift test
         run: swift test --package-path Packages/${{ matrix.package }}
 
@@ -67,9 +65,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
-      - name: Test Apple packages (SwiftPM)
+      - name: Test packages (SwiftPM, macOS)
         run: |
-          for package in ChanMedia ChanUI ChanFeatures; do
+          for package in ChanDB ChanMedia ChanUI ChanFeatures; do
             echo "==> swift test $package"
             swift test --package-path "Packages/$package"
           done
