@@ -17,7 +17,7 @@ let package = Package(
             dependencies: [
                 .product(name: "ChanCore", package: "ChanCore"),
                 .product(name: "Nuke", package: "Nuke"),
-                .product(name: "NukeUI", package: "NukeUI"),
+                .product(name: "NukeUI", package: "Nuke"),
             ]
         ),
         .testTarget(name: "ChanMediaTests", dependencies: ["ChanMedia"]),
