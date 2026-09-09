@@ -92,7 +92,11 @@ final class ChanDatabaseTests: XCTestCase {
     }
 
     func testPruneThreadsRemovesStaleData() throws {
-        try database.saveCatalog(board: "g", posts: [post(1), post(2), post(3)])
+        try database.saveCatalog(board: "g", posts: [
+            post(1, time: 100),
+            post(2, time: 200),
+            post(3, time: 300),
+        ])
         try database.pruneThreads(board: "g", keeping: [1, 3])
         XCTAssertEqual(try database.catalog(board: "g").map(\.no), [PostNumber(3), PostNumber(1)])
     }
