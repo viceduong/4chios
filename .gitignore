@@ -1,0 +1,37 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+!*.xcodeproj/project.pbxproj
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved.bak
+
+# macOS
+.DS_Store
+._*
+
+# Secrets — never commit tokens
+.remote-pi-token.txt
+.env
+*.pem
+*.p12
+*.mobileprovision
+
+# Build artifacts / reproducibility manifests
+artifacts/
+build-manifest.json
+
+# Editors
+.vscode/
+.idea/

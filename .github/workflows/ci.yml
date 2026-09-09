@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fast lane: the platform-agnostic domain layer builds and tests on Linux.
+  # Seconds instead of minutes, and it enforces the no-UIKit-in-core rule.
+  # ---------------------------------------------------------------------------
+  core-tests:
+    name: Core tests (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ChanCore, ChanAPI, ChanDB]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+
+      - name: swift test
+        run: swift test --package-path Packages/${{ matrix.package }}
+
+  # ---------------------------------------------------------------------------
+  # Apple lane: generate the project, build the app unsigned, package an .ipa
+  # that TrollStore can install, and run the simulator test suite.
+  # ---------------------------------------------------------------------------
+  ios-build:
+    name: iOS build + unsigned IPA
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: |
+          curl -sL https://github.com/yonaskolb/XcodeGen/releases/latest/download/xcodegen.zip -o /tmp/xcodegen.zip
+          unzip -q /tmp/xcodegen.zip -d /tmp/xcgen
+          echo "/tmp/xcgen/xcodegen/bin" >> "$GITHUB_PATH"
+          /tmp/xcgen/xcodegen/bin/xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Test Apple packages (SwiftPM)
+        run: |
+          for package in ChanMedia ChanUI ChanFeatures; do
+            echo "==> swift test $package"
+            swift test --package-path "Packages/$package"
+          done
+
+      - name: Build for device (unsigned)
+        run: |
+          xcodebuild \
+            -project Ch4ios.xcodeproj \
+            -scheme Ch4ios \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify deployment target
+        run: |
+          APP="build/Build/Products/Debug-iphoneos/Ch4ios.app"
+          test -d "$APP"
+          echo "MinimumOSVersion: $(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist")"
+
+      - name: Package unsigned .ipa
+        run: |
+          APP="build/Build/Products/Debug-iphoneos/Ch4ios.app"
+          rm -rf Payload Ch4ios.ipa
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry Ch4ios.ipa Payload
+          ls -la Ch4ios.ipa
+
+      - name: Run app unit tests (simulator)
+        run: |
+          SIM_ID=$(xcrun simctl list devices available | grep -E 'iPhone' | head -1 | grep -oE '\([0-9A-F-]{36}\)' | tr -d '()')
+          echo "simulator: $SIM_ID"
+          xcodebuild test \
+            -project Ch4ios.xcodeproj \
+            -scheme Ch4ios \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload unsigned .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ch4ios-ipa
+          path: Ch4ios.ipa
+          retention-days: 14
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Informational until the style baseline is settled in M1.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (informational)
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: SwiftLint
+        run: |
+          if command -v swiftlint >/dev/null 2>&1; then
+            swiftlint lint --quiet
+          else
+            echo "swiftlint not installed on this runner"
+          fi

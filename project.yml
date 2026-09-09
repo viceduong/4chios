@@ -1,0 +1,93 @@
+name: Ch4ios
+
+options:
+  bundleIdPrefix: com.viceduong
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    # CI-only: builds are always unsigned; TrollStore signs on install.
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+
+packages:
+  ChanCore:
+    path: Packages/ChanCore
+  ChanAPI:
+    path: Packages/ChanAPI
+  ChanDB:
+    path: Packages/ChanDB
+  ChanMedia:
+    path: Packages/ChanMedia
+  ChanUI:
+    path: Packages/ChanUI
+  ChanFeatures:
+    path: Packages/ChanFeatures
+
+targets:
+  Ch4ios:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 4chios
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - fetch
+        NSCameraUsageDescription: 4chios uses the camera so you can attach a photo to a post.
+        NSPhotoLibraryUsageDescription: 4chios needs access to your photos so you can attach an image to a post.
+        NSPhotoLibraryAddUsageDescription: 4chios saves images and videos you choose to your photo library.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.viceduong.ch4ios
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: App/Info.plist
+    dependencies:
+      - package: ChanFeatures
+      - package: ChanCore
+    scheme:
+      testTargets:
+        - Ch4iosTests
+      gatherCoverageData: true
+
+  Ch4iosTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Ch4ios
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.viceduong.ch4ios.tests

@@ -1,0 +1,48 @@
+included:
+  - App
+  - Packages
+  - Tests
+
+excluded:
+  - .build
+  - DerivedData
+  - Packages/*/.build
+
+disabled_rules:
+  - todo
+  - trailing_comma
+  - multiple_closures_with_trailing_closure
+  - statement_position
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - redundant_nil_coalescing
+  - sorted_imports
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+
+line_length:
+  warning: 120
+  error: 160
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  min_length: 2
+  excluded: [id, op, no, x, y, w, h, db, to]
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+function_body_length:
+  warning: 80
+  error: 150
+
+file_length:
+  warning: 500
+  error: 900
+
+reporter: "xcode"

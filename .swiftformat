@@ -1,0 +1,11 @@
+--swiftversion 5.9
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--stripunusedargs closure-only
+--disable redundantSelf
+--disable trailingCommas
+--disable wrapMultilineStatementBraces
+--exclude .build,DerivedData,Packages/*/.build
