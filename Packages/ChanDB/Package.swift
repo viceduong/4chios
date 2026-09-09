@@ -9,9 +9,16 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../ChanCore"),
+        .package(url: "https://github.com/groue/GRDB.swift", from: "6.29.0"),
     ],
     targets: [
-        .target(name: "ChanDB", dependencies: [.product(name: "ChanCore", package: "ChanCore")]),
+        .target(
+            name: "ChanDB",
+            dependencies: [
+                .product(name: "ChanCore", package: "ChanCore"),
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ]
+        ),
         .testTarget(name: "ChanDBTests", dependencies: ["ChanDB"]),
     ],
     swiftLanguageVersions: [.v5]

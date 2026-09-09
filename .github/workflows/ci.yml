@@ -34,6 +34,11 @@ jobs:
         with:
           swift-version: "6.0"
 
+      - name: Install SQLite headers (GRDB)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsqlite3-dev
+
       - name: swift test
         run: swift test --package-path Packages/${{ matrix.package }}
 
