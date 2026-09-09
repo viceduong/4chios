@@ -43,7 +43,6 @@ public final class ChanImageView: UIView {
         imageView.clipsToBounds = true
         imageView.layer.cornerRadius = cornerRadius
         imageView.layer.cornerCurve = .continuous
-        imageView.fadeInDuration = 0.2
         addSubview(imageView)
 
         NSLayoutConstraint.activate([
