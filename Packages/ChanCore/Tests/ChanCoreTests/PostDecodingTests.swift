@@ -2,11 +2,7 @@ import XCTest
 @testable import ChanCore
 
 final class PostDecodingTests: XCTestCase {
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
-    }()
+    private let decoder = JSONDecoder()
 
     func testDecodesOpPostWithAttachment() throws {
         let json = """
@@ -79,11 +75,7 @@ final class PostDecodingTests: XCTestCase {
 }
 
 final class BoardDecodingTests: XCTestCase {
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
-    }()
+    private let decoder = JSONDecoder()
 
     func testDecodesBoardList() throws {
         let json = """

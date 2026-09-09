@@ -84,7 +84,7 @@ final class ChanDatabaseTests: XCTestCase {
     }
 
     func testThreadMetadata() throws {
-        try database.saveCatalog(board: "g", posts: [post(1, replies: 42, sticky: true)])
+        try database.saveCatalog(board: "g", posts: [post(1, sticky: true, replies: 42)])
         let metadata = try XCTUnwrap(database.threadMetadata(board: "g", op: 1))
         XCTAssertEqual(metadata.replies, 42)
         XCTAssertTrue(metadata.isSticky)

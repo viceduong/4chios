@@ -2,8 +2,8 @@ import Foundation
 
 /// A board as returned by `GET /boards.json`.
 ///
-/// Decoded with `keyDecodingStrategy = .convertFromSnakeCase`, so property names
-/// are camelCase and every field the API may omit is optional.
+/// Keys are declared explicitly (see `CodingKeys`); every field the API may omit
+/// is optional.
 public struct Board: Codable, Hashable, Sendable, Identifiable {
     public var id: BoardID { board }
 
@@ -47,7 +47,8 @@ public struct Board: Codable, Hashable, Sendable, Identifiable {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case isArchived, isLocked
+            case isArchived = "is_archived"
+            case isLocked = "is_locked"
         }
     }
 
@@ -121,9 +122,21 @@ public struct Board: Codable, Hashable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case board, title, wsBoard, perPage, pages, bumpLimit, imageLimit, maxFilesize
-        case maxWebmFilesize, maxWebmDuration, maxCommentChars, spoilers, customSpoilers
-        case userIds, countryFlags, cooldowns, meta
+        case board, title
+        case wsBoard = "ws_board"
+        case perPage = "per_page"
+        case pages
+        case bumpLimit = "bump_limit"
+        case imageLimit = "image_limit"
+        case maxFilesize = "max_filesize"
+        case maxWebmFilesize = "max_webm_filesize"
+        case maxWebmDuration = "max_webm_duration"
+        case maxCommentChars = "max_comment_chars"
+        case spoilers
+        case customSpoilers = "custom_spoilers"
+        case userIds = "user_ids"
+        case countryFlags = "country_flags"
+        case cooldowns, meta
     }
 }
 
@@ -148,4 +161,10 @@ public struct ThreadTailResponse: Codable, Sendable {
     public let tailId: PostNumber?
     public let tailSize: Int?
     public let posts: [Post]
+
+    private enum CodingKeys: String, CodingKey {
+        case tailId = "tail_id"
+        case tailSize = "tail_size"
+        case posts
+    }
 }

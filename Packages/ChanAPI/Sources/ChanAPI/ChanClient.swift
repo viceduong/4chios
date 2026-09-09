@@ -112,8 +112,8 @@ public struct ChanClient: Sendable {
     }
 
     static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
+        // No key strategy: every model declares explicit API keys so the mapping
+        // is visible and testable rather than implicit.
+        JSONDecoder()
     }()
 }
