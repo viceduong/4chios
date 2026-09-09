@@ -136,7 +136,7 @@ public struct ChanPoster: Sendable {
             return .cooldown(seconds: seconds)
         }
         if let message = decoded.error {
-            return .failure(message)
+            return .failure(message: message)
         }
         guard let challenge = decoded.challenge,
               let image = decoded.img.flatMap({ Data(base64Encoded: $0) }),
@@ -230,7 +230,7 @@ public struct ChanPoster: Sendable {
 
         if let decoded = try? JSONDecoder().decode(PostResponse.self, from: response.body) {
             if let message = decoded.error {
-                return .failure(message)
+                return .failure(message: message)
             }
             let thread = decoded.tid ?? decoded.thread
             let number = decoded.pid ?? decoded.post
