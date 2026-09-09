@@ -5,29 +5,36 @@ import SwiftUI
 /// The composition root of the feature layer. The app target stays deliberately thin
 /// and only injects the environment; every screen hangs off this view.
 public struct ChanRootView: View {
+    @ObservedObject private var settings = AppEnvironment.shared.settings
+    @StateObject private var boardStore = BoardListStore(environment: .shared)
+
     @Environment(\.chanTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showSettings = false
 
     public init() {}
 
     public var body: some View {
-        ZStack {
-            theme.background.ignoresSafeArea()
-
-            VStack(spacing: ChanSpacing.m) {
-                Text("4chios")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundColor(theme.primaryText)
-
-                Text("v\(ChanVersion.current) · schema \(ChanVersion.schemaVersion)")
-                    .font(.footnote.monospaced())
-                    .foregroundColor(theme.secondaryText)
-
-                Text("M0 scaffold online — data layer lands next")
-                    .font(.subheadline)
-                    .foregroundColor(theme.accent)
-                    .padding(.top, ChanSpacing.s)
-            }
-            .padding(ChanSpacing.xl)
+        NavigationView {
+            BoardListView(store: boardStore, settings: settings)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            ChanHaptics.tap()
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .tint(theme.accent)
+                    }
+                }
+        }
+        .navigationViewStyle(.stack)
+        .environment(\.chanTheme, settings.theme(for: colorScheme))
+        .tint(settings.theme(for: colorScheme).accent)
+        .sheet(isPresented: $showSettings) {
+            SettingsScreen(settings: settings)
+                .environment(\.chanTheme, settings.theme(for: colorScheme))
         }
     }
 }
