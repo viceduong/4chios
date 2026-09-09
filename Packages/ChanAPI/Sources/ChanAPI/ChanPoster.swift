@@ -122,14 +122,14 @@ public struct ChanPoster: Sendable {
         let response = try await transport.send(request)
 
         guard response.isSuccess else {
-            return .failure("Captcha request failed (\(response.statusCode)).")
+            return .failure(message: "Captcha request failed (\(response.statusCode)).")
         }
 
         let decoded: CaptchaResponse
         do {
             decoded = try JSONDecoder().decode(CaptchaResponse.self, from: response.body)
         } catch {
-            return .failure("Could not read the captcha response.")
+            return .failure(message: "Could not read the captcha response.")
         }
 
         if let seconds = decoded.pcd, seconds > 0 {
@@ -141,7 +141,7 @@ public struct ChanPoster: Sendable {
         guard let challenge = decoded.challenge,
               let image = decoded.img.flatMap({ Data(base64Encoded: $0) }),
               let background = decoded.bg.flatMap({ Data(base64Encoded: $0) }) else {
-            return .failure("The captcha response was incomplete.")
+            return .failure(message: "The captcha response was incomplete.")
         }
 
         return .challenge(
@@ -225,7 +225,7 @@ public struct ChanPoster: Sendable {
 
         let response = try await transport.send(request)
         guard response.isSuccess else {
-            return .failure("The server rejected the post (\(response.statusCode)).")
+            return .failure(message: "The server rejected the post (\(response.statusCode)).")
         }
 
         if let decoded = try? JSONDecoder().decode(PostResponse.self, from: response.body) {
@@ -240,7 +240,7 @@ public struct ChanPoster: Sendable {
         }
 
         let snippet = String(decoding: response.body.prefix(280), as: UTF8.self)
-        return .failure(snippet.isEmpty ? "The server returned an unexpected response." : snippet)
+        return .failure(message: snippet.isEmpty ? "The server returned an unexpected response." : snippet)
     }
 }
 
