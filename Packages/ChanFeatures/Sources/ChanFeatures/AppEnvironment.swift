@@ -8,17 +8,27 @@ import SwiftUI
 /// The composition root. Screens never construct clients or databases themselves.
 @MainActor
 public final class AppEnvironment: ObservableObject {
+    public let rateLimiter: ChanRateLimiter
     public let client: ChanClient
+    public let poster: ChanPoster
     public let database: ChanDatabase
     public let settings: ChanSettings
 
-    public init(client: ChanClient, database: ChanDatabase, settings: ChanSettings) {
+    public init(
+        rateLimiter: ChanRateLimiter,
+        client: ChanClient,
+        poster: ChanPoster,
+        database: ChanDatabase,
+        settings: ChanSettings
+    ) {
+        self.rateLimiter = rateLimiter
         self.client = client
+        self.poster = poster
         self.database = database
         self.settings = settings
     }
 
-    /// Production wiring: on-disk database, live network, persisted settings.
+    /// Production wiring: one shared 1 req/s limiter, on-disk database, persisted settings.
     @MainActor public static let shared = AppEnvironment.live()
 
     public static func live() -> AppEnvironment {
@@ -29,7 +39,15 @@ public final class AppEnvironment: ObservableObject {
             // A corrupt or unreadable store must not brick the app.
             database = try! ChanDatabase(inMemory: true)
         }
-        return AppEnvironment(client: ChanClient(), database: database, settings: ChanSettings())
+
+        let rateLimiter = ChanRateLimiter()
+        return AppEnvironment(
+            rateLimiter: rateLimiter,
+            client: ChanClient(rateLimiter: rateLimiter),
+            poster: ChanPoster(rateLimiter: rateLimiter),
+            database: database,
+            settings: ChanSettings()
+        )
     }
 }
 

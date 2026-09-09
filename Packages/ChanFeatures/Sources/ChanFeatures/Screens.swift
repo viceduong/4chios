@@ -55,6 +55,7 @@ public struct CatalogScreen: View {
     @ObservedObject private var settings = AppEnvironment.shared.settings
     @Environment(\.chanTheme) private var theme
     @State private var selected: Post?
+    @State private var showComposer = false
 
     public init(board: BoardID) {
         _store = StateObject(wrappedValue: CatalogStore(board: board, environment: .shared))
@@ -73,14 +74,25 @@ public struct CatalogScreen: View {
         .background(threadLink)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    settings.toggleFavorite(store.board)
-                    ChanHaptics.tap()
-                } label: {
-                    Image(systemName: settings.isFavorite(store.board) ? "star.fill" : "star")
+                HStack(spacing: 16) {
+                    Button {
+                        settings.toggleFavorite(store.board)
+                        ChanHaptics.tap()
+                    } label: {
+                        Image(systemName: settings.isFavorite(store.board) ? "star.fill" : "star")
+                    }
+                    Button {
+                        showComposer = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
                 }
                 .tint(theme.accent)
             }
+        }
+        .sheet(isPresented: $showComposer) {
+            ComposerScreen(board: store.board, thread: nil)
+                .environment(\.chanTheme, theme)
         }
         .task { await store.loadIfNeeded() }
         .overlay(alignment: .center) { emptyState }
@@ -124,6 +136,7 @@ public struct ThreadScreen: View {
     @ObservedObject private var settings = AppEnvironment.shared.settings
     @Environment(\.chanTheme) private var theme
     @State private var mediaPost: Post?
+    @State private var showComposer = false
 
     public init(board: BoardID, op: PostNumber) {
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
@@ -154,9 +167,18 @@ public struct ThreadScreen: View {
                     } label: {
                         Image(systemName: store.isBookmarked ? "bookmark.fill" : "bookmark")
                     }
+                    Button {
+                        showComposer = true
+                    } label: {
+                        Image(systemName: "arrowshape.turn.up.left")
+                    }
                 }
                 .tint(theme.accent)
             }
+        }
+        .sheet(isPresented: $showComposer) {
+            ComposerScreen(board: store.board, thread: store.op)
+                .environment(\.chanTheme, theme)
         }
         .task {
             await store.loadIfNeeded()
