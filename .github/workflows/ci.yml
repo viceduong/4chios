@@ -67,10 +67,13 @@ jobs:
 
       - name: Test packages (SwiftPM, macOS)
         run: |
-          for package in ChanDB ChanMedia ChanUI ChanFeatures; do
+          for package in ChanDB; do
             echo "==> swift test $package"
             swift test --package-path "Packages/$package"
           done
+          # ChanUI/ChanMedia/ChanFeatures are iOS-only (UIKit, Nuke's NSImage
+          # Sendable issue on macOS). They are compiled by the iOS app build and
+          # exercised by the simulator test run below.
 
       - name: Build for device (unsigned)
         run: |

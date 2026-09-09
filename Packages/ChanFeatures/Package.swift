@@ -25,7 +25,6 @@ let package = Package(
                 .product(name: "ChanUI", package: "ChanUI"),
             ]
         ),
-        .testTarget(name: "ChanFeaturesTests", dependencies: ["ChanFeatures"]),
     ],
     swiftLanguageVersions: [.v5]
 )

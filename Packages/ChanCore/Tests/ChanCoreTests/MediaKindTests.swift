@@ -1,5 +1,5 @@
 import XCTest
-@testable import ChanMedia
+@testable import ChanCore
 
 final class MediaKindTests: XCTestCase {
     func testExtensionMapping() {

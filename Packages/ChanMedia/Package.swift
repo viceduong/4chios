@@ -20,7 +20,6 @@ let package = Package(
                 .product(name: "NukeUI", package: "Nuke"),
             ]
         ),
-        .testTarget(name: "ChanMediaTests", dependencies: ["ChanMedia"]),
     ],
     swiftLanguageVersions: [.v5]
 )
