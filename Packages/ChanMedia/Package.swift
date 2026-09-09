@@ -11,6 +11,7 @@ let package = Package(
         .package(path: "../ChanCore"),
         .package(url: "https://github.com/kean/Nuke", from: "12.8.0"),
         .package(url: "https://github.com/kaishin/Gifu.git", "3.4.0"..<"4.0.0"),
+        .package(url: "https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM", from: "3.7.3"),
     ],
     targets: [
         .target(
@@ -20,6 +21,7 @@ let package = Package(
                 .product(name: "Nuke", package: "Nuke"),
                 .product(name: "NukeUI", package: "Nuke"),
                 .product(name: "Gifu", package: "Gifu"),
+                .product(name: "MobileVLCKit", package: "MobileVLCKit-SPM"),
             ]
         ),
     ],

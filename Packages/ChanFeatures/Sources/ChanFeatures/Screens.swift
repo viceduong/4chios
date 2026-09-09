@@ -246,7 +246,7 @@ public struct MediaViewerScreen: View {
         if attachment.ext.lowercased().contains("mp4") {
             NativeVideoPlayer(url: url)
         } else {
-            videoPlaceholder(attachment)
+            VLCVideoView(url: url)
         }
     }
 

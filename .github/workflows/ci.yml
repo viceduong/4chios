@@ -65,6 +65,16 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
+      - name: Cache SwiftPM checkouts and binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            build/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Packages/*/Package.swift') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       - name: Test packages (SwiftPM, macOS)
         run: |
           for package in ChanDB; do
