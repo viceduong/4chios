@@ -1,3 +1,4 @@
+import ChanCore
 import Foundation
 
 /// The hosts that serve the 4chan read API and its assets.

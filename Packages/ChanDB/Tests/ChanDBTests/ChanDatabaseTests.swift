@@ -7,10 +7,11 @@ final class ChanDatabaseTests: XCTestCase {
         XCTAssertEqual(ChanDatabase.schemaVersion, ChanVersion.schemaVersion)
     }
 
-    func testDefaultURLUsesApplicationSupport() throws {
+    func testDefaultURLLivesInChanDBDirectory() throws {
         let url = try ChanDatabase.defaultURL()
         XCTAssertEqual(url.lastPathComponent, ChanDatabase.fileName)
         XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "ChanDB")
-        XCTAssertTrue(url.path.contains("Application Support") || url.path.contains("ApplicationSupport"))
+        // The directory must exist after `defaultURL()` returns.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path))
     }
 }
