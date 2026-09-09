@@ -1,3 +1,4 @@
+import AVKit
 import ChanAPI
 import ChanCore
 import ChanMedia
@@ -194,7 +195,9 @@ public struct MediaViewerScreen: View {
 
             if let attachment = post.attachment {
                 if attachment.isVideo {
-                    videoPlaceholder(attachment)
+                    videoView(attachment)
+                } else if attachment.isAnimated {
+                    ChanGIFImage(url: ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext))
                 } else {
                     ZoomableImageView(url: ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext))
                 }
@@ -213,6 +216,16 @@ public struct MediaViewerScreen: View {
             .padding(ChanSpacing.l)
         }
         .overlay(alignment: .bottom) { caption }
+    }
+
+    @ViewBuilder
+    private func videoView(_ attachment: Attachment) -> some View {
+        let url = ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext)
+        if attachment.ext.lowercased().contains("mp4") {
+            NativeVideoPlayer(url: url)
+        } else {
+            videoPlaceholder(attachment)
+        }
     }
 
     private func videoPlaceholder(_ attachment: Attachment) -> some View {
@@ -310,6 +323,33 @@ struct ZoomableImageView: UIViewRepresentable {
             guard let scrollView = gesture.view as? UIScrollView else { return }
             let zoomed = scrollView.zoomScale > scrollView.minimumZoomScale
             scrollView.setZoomScale(zoomed ? scrollView.minimumZoomScale : 2.5, animated: true)
+        }
+    }
+}
+
+/// Native playback for `.mp4` attachments (AVFoundation cannot decode webm).
+struct NativeVideoPlayer: View {
+    let url: URL
+
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        Group {
+            if let player {
+                VideoPlayer(player: player)
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .onAppear {
+            guard player == nil else { return }
+            let newPlayer = AVPlayer(url: url)
+            newPlayer.isMuted = true
+            player = newPlayer
+            newPlayer.play()
+        }
+        .onDisappear {
+            player?.pause()
         }
     }
 }

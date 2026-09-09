@@ -10,6 +10,7 @@ let package = Package(
     dependencies: [
         .package(path: "../ChanCore"),
         .package(url: "https://github.com/kean/Nuke", from: "12.8.0"),
+        .package(url: "https://github.com/kaishin/Gifu.git", from: "4.0.0"),
     ],
     targets: [
         .target(
@@ -18,6 +19,7 @@ let package = Package(
                 .product(name: "ChanCore", package: "ChanCore"),
                 .product(name: "Nuke", package: "Nuke"),
                 .product(name: "NukeUI", package: "Nuke"),
+                .product(name: "Gifu", package: "Gifu"),
             ]
         ),
     ],
