@@ -1,5 +1,6 @@
 import Foundation
 import NukeUI
+import SwiftUI
 import UIKit
 
 /// A UIKit image view built for reused cells.
@@ -54,7 +55,7 @@ public final class ChanImageView: UIView {
     }
 
     /// Loads a URL, cancelling whatever was in flight.
-    public func load(_ url: URL?, transition: LazyImageView.Transition = .fadeIn) {
+    public func load(_ url: URL?, transition: LazyImageView.Transition = .fadeIn(duration: 0.2)) {
         guard url != currentURL else { return }
         currentURL = url
         imageView.transition = transition
