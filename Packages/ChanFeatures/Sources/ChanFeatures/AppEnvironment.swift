@@ -98,11 +98,6 @@ public final class ChanSettings: ObservableObject {
         didSet { save() }
     }
 
-    /// Whether thread images may be sent to the model.
-    @Published public var aiSendsImages: Bool {
-        didSet { save() }
-    }
-
     /// Held in the Keychain, never in UserDefaults.
     @Published public var aiAPIKey: String {
         didSet { ChanKeychain.set(aiAPIKey, for: Keys.aiAPIKey) }
@@ -134,7 +129,6 @@ public final class ChanSettings: ObservableObject {
         aiEndpoint = defaults.string(forKey: Keys.aiEndpoint)
             ?? AIConfiguration.generalComputeBaseURL.absoluteString
         aiModel = defaults.string(forKey: Keys.aiModel) ?? AIConfiguration.generalComputeModel
-        aiSendsImages = defaults.object(forKey: Keys.aiSendsImages) as? Bool ?? true
 
         // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
         // so local builds work without pasting anything. Never committed.
@@ -178,7 +172,6 @@ public final class ChanSettings: ObservableObject {
         defaults.set(showThumbnails, forKey: Keys.showThumbnails)
         defaults.set(aiEndpoint, forKey: Keys.aiEndpoint)
         defaults.set(aiModel, forKey: Keys.aiModel)
-        defaults.set(aiSendsImages, forKey: Keys.aiSendsImages)
         // The API key deliberately never reaches UserDefaults.
     }
 
@@ -189,7 +182,6 @@ public final class ChanSettings: ObservableObject {
         static let showThumbnails = "settings.showThumbnails"
         static let aiEndpoint = "settings.aiEndpoint"
         static let aiModel = "settings.aiModel"
-        static let aiSendsImages = "settings.aiSendsImages"
         static let aiAPIKey = "settings.aiAPIKey"
     }
 }

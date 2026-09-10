@@ -21,13 +21,7 @@ public final class ThreadSummaryStore: ObservableObject {
     @Published public private(set) var summary: ThreadSummary?
     /// True when the cached summary covers fewer posts than the thread now has.
     @Published public private(set) var isStale = false
-    @Published public var style: SummaryStyle = .bullets {
-        didSet {
-            guard style != oldValue, let summary else { return }
-            isStale = true
-            _ = summary
-        }
-    }
+    @Published public var style: SummaryStyle = .bullets
 
     private let environment: AppEnvironment
     private let board: BoardID
@@ -44,9 +38,16 @@ public final class ThreadSummaryStore: ObservableObject {
         environment.settings.isAIConfigured
     }
 
+    /// One tap on the summary button: show what we already have, otherwise ask
+    /// the model immediately.
+    public func start(posts: [Post]) {
+        loadCached(posts: posts)
+        guard summary == nil || isStale else { return }
+        summarize(posts: posts)
+    }
+
     /// Shows a previously generated summary for this thread, if one exists.
     public func loadCached(posts: [Post]) {
-        guard summary == nil else { return }
         let model = environment.settings.aiModel
         guard let cached = try? environment.database.summary(board: board, op: op, model: model),
               let decoded = try? JSONDecoder().decode(ThreadSummary.self, from: Data(cached.json.utf8)) else {
@@ -71,33 +72,22 @@ public final class ThreadSummaryStore: ObservableObject {
         }
 
         let snapshot = posts.sorted { $0.no < $1.no }
-        let sendsImages = settings.aiSendsImages
-        phase = .working("Preparing…")
+        phase = .working("Reading \(snapshot.count) posts…")
 
         task = Task { [weak self] in
             guard let self else { return }
 
-            let images = sendsImages
-                ? await ThreadImageCollector.collect(board: self.board, posts: snapshot, limit: 6)
-                : []
-            if Task.isCancelled { return }
-
             let client = AIChatClient(configuration: settings.aiConfiguration)
             let summarizer = ThreadSummarizer(
                 client: client,
-                options: ThreadSummarizer.Options(
-                    style: self.style,
-                    includeImages: sendsImages,
-                    maximumImages: 6
-                )
+                options: ThreadSummarizer.Options(style: self.style)
             )
 
             do {
                 let result = try await summarizer.summarize(
                     board: self.board,
                     op: self.op,
-                    posts: snapshot,
-                    images: images
+                    posts: snapshot
                 ) { status in
                     Task { @MainActor [weak self] in
                         guard let self, self.phase.isWorking else { return }

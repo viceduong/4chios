@@ -149,26 +149,6 @@ final class AIChatClientTests: XCTestCase {
         XCTAssertEqual(messages.first?["content"] as? String, "hi")
     }
 
-    func testEncodesImagesAsDataURLParts() async throws {
-        let image = AIImage(postNumber: PostNumber(7), data: Data([0x01, 0x02, 0x03]))
-        let (chat, transport) = client([completionResponse("seen")])
-        _ = try await chat.complete([AIChatMessage(role: .user, text: "look", images: [image])])
-
-        let body = decodeBody(try XCTUnwrap(transport.requests.first))
-        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-        let parts = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
-
-        XCTAssertEqual(parts.count, 2)
-        XCTAssertEqual(parts[0]["type"] as? String, "text")
-        XCTAssertEqual(parts[0]["text"] as? String, "look")
-
-        XCTAssertEqual(parts[1]["type"] as? String, "image_url")
-        let imageURL = try XCTUnwrap(parts[1]["image_url"] as? [String: Any])
-        let url = try XCTUnwrap(imageURL["url"] as? String)
-        XCTAssertTrue(url.hasPrefix("data:image/jpeg;base64,"))
-        XCTAssertTrue(url.hasSuffix(Data([0x01, 0x02, 0x03]).base64EncodedString()))
-    }
-
     func testUnconfiguredKeyIsRejectedBeforeAnyRequest() async {
         let (chat, transport) = client([completionResponse("never")], configuration: AIConfiguration(apiKey: ""))
         do {
@@ -263,7 +243,7 @@ final class ThreadSummarizerTests: XCTestCase {
 
         let (summarizer, transport) = summarizer(
             responses,
-            options: ThreadSummarizer.Options(includeImages: false, chunkCharacterLimit: limit)
+            options: ThreadSummarizer.Options(chunkCharacterLimit: limit)
         )
 
         let summary = try await summarizer.summarize(board: "g", op: 1, posts: posts)
@@ -277,32 +257,6 @@ final class ThreadSummarizerTests: XCTestCase {
         let finalPrompt = try XCTUnwrap(messages.last?["content"] as? String)
         XCTAssertTrue(finalPrompt.contains("<part-1>"))
         XCTAssertTrue(finalPrompt.contains("<part-\(expectedChunks)>"))
-    }
-
-    func testImagesAreCappedAndOnlySentWhenEnabled() async throws {
-        let images = (1...10).map { AIImage(postNumber: PostNumber($0), data: Data([UInt8($0)])) }
-
-        let (withImages, transportWith) = summarizer(
-            [completionResponse("ok")],
-            options: ThreadSummarizer.Options(includeImages: true, maximumImages: 3)
-        )
-        let summary = try await withImages.summarize(board: "g", op: 1, posts: thread(3), images: images)
-        XCTAssertEqual(summary.imageCount, 3)
-
-        let body = decodeBody(try XCTUnwrap(transportWith.requests.first))
-        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-        let parts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
-        XCTAssertEqual(parts.filter { $0["type"] as? String == "image_url" }.count, 3)
-        XCTAssertTrue((parts.first?["text"] as? String)?.contains(">>1, >>2, >>3") == true)
-
-        let (withoutImages, transportWithout) = summarizer(
-            [completionResponse("ok")],
-            options: ThreadSummarizer.Options(includeImages: false)
-        )
-        let plain = try await withoutImages.summarize(board: "g", op: 1, posts: thread(3), images: images)
-        XCTAssertEqual(plain.imageCount, 0)
-        let plainMessages = try XCTUnwrap(decodeBody(try XCTUnwrap(transportWithout.requests.first))["messages"] as? [[String: Any]])
-        XCTAssertTrue(plainMessages.last?["content"] is String)
     }
 
     func testStatusesAreReported() async throws {

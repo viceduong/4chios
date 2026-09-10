@@ -1,4 +1,3 @@
-import ChanAPI
 import ChanCore
 import Foundation
 
@@ -45,7 +44,6 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
     public let postCount: Int
     /// 1 means it fit in a single request; more means a map-reduce pass ran.
     public let chunkCount: Int
-    public let imageCount: Int
     public let generatedAt: Date
 
     public init(
@@ -56,7 +54,6 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
         citedPosts: [PostNumber],
         postCount: Int,
         chunkCount: Int,
-        imageCount: Int,
         generatedAt: Date
     ) {
         self.board = board
@@ -66,31 +63,24 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
         self.citedPosts = citedPosts
         self.postCount = postCount
         self.chunkCount = chunkCount
-        self.imageCount = imageCount
         self.generatedAt = generatedAt
     }
 }
 
-/// Summarizes a thread with a multimodal model.
+/// Summarizes a thread's **text** with a chat model.
 ///
 /// Long threads are map-reduced: each chunk is summarized, then the partials are
 /// merged, so the context window is never the limit.
 public struct ThreadSummarizer: Sendable {
     public struct Options: Sendable {
         public var style: SummaryStyle
-        public var includeImages: Bool
-        public var maximumImages: Int
         public var chunkCharacterLimit: Int
 
         public init(
             style: SummaryStyle = .bullets,
-            includeImages: Bool = true,
-            maximumImages: Int = 6,
             chunkCharacterLimit: Int = ThreadTranscript.defaultChunkCharacterLimit
         ) {
             self.style = style
-            self.includeImages = includeImages
-            self.maximumImages = maximumImages
             self.chunkCharacterLimit = chunkCharacterLimit
         }
     }
@@ -107,11 +97,10 @@ public struct ThreadSummarizer: Sendable {
         board: BoardID,
         op: PostNumber,
         posts: [Post],
-        images: [AIImage] = [],
         onStatus: (@Sendable (String) -> Void)? = nil
     ) async throws -> ThreadSummary {
         do {
-            return try await run(board: board, op: op, posts: posts, images: images, onStatus: onStatus)
+            return try await run(board: board, op: op, posts: posts, onStatus: onStatus)
         } catch is CancellationError {
             throw AIChatError.cancelled
         }
@@ -121,7 +110,6 @@ public struct ThreadSummarizer: Sendable {
         board: BoardID,
         op: PostNumber,
         posts: [Post],
-        images: [AIImage],
         onStatus: (@Sendable (String) -> Void)?
     ) async throws -> ThreadSummary {
         guard !posts.isEmpty else {
@@ -130,21 +118,19 @@ public struct ThreadSummarizer: Sendable {
 
         let ordered = posts.sorted { $0.no < $1.no }
         let chunks = ThreadTranscript.chunks(ordered, characterLimit: options.chunkCharacterLimit)
-        let usableImages = options.includeImages ? Array(images.prefix(options.maximumImages)) : []
 
         onStatus?("Reading \(ordered.count) posts…")
         try Task.checkCancellation()
 
         let text: String
         if chunks.count == 1 {
-            onStatus?(usableImages.isEmpty ? "Summarizing…" : "Summarizing with \(usableImages.count) images…")
-            let prompt = singlePassPrompt(
-                transcript: ThreadTranscript.render(chunks[0]),
-                imagePosts: usableImages.map(\.postNumber)
-            )
+            onStatus?("Summarizing…")
             text = try await client.complete([
                 Self.systemMessage,
-                AIChatMessage(role: .user, text: prompt, images: usableImages),
+                AIChatMessage(
+                    role: .user,
+                    text: singlePassPrompt(transcript: ThreadTranscript.render(chunks[0]))
+                ),
             ])
         } else {
             var partials: [String] = []
@@ -170,14 +156,7 @@ public struct ThreadSummarizer: Sendable {
             onStatus?("Combining \(chunks.count) summaries…")
             text = try await client.complete([
                 Self.systemMessage,
-                AIChatMessage(
-                    role: .user,
-                    text: reducePrompt(
-                        partials: partials,
-                        imagePosts: usableImages.map(\.postNumber)
-                    ),
-                    images: usableImages
-                ),
+                AIChatMessage(role: .user, text: reducePrompt(partials: partials)),
             ])
         }
 
@@ -190,7 +169,6 @@ public struct ThreadSummarizer: Sendable {
             citedPosts: Self.citations(in: text).filter { known.contains($0) },
             postCount: ordered.count,
             chunkCount: chunks.count,
-            imageCount: usableImages.count,
             generatedAt: Date()
         )
     }
@@ -210,23 +188,19 @@ public struct ThreadSummarizer: Sendable {
         """
     )
 
-    private func singlePassPrompt(transcript: String, imagePosts: [PostNumber]) -> String {
-        var prompt = """
+    private func singlePassPrompt(transcript: String) -> String {
+        """
         Summarize this thread in \(options.style.instruction).
 
         Cover: the topic; the main points and who makes them; any disagreement; \
-        notable media; and where the thread stands now.
+        notable media mentioned; and where the thread stands now.
 
         Cite posts as >>N.
 
+        <thread>
+        \(transcript)
+        </thread>
         """
-        if !imagePosts.isEmpty {
-            prompt += "The most-discussed images are attached after this message, in this post order: "
-            prompt += imagePosts.map { ">>\($0.value)" }.joined(separator: ", ")
-            prompt += ". Describe what they show.\n\n"
-        }
-        prompt += "<thread>\n\(transcript)\n</thread>"
-        return prompt
     }
 
     private func chunkPrompt(transcript: String, index: Int, total: Int) -> String {
@@ -241,18 +215,13 @@ public struct ThreadSummarizer: Sendable {
         """
     }
 
-    private func reducePrompt(partials: [String], imagePosts: [PostNumber]) -> String {
+    private func reducePrompt(partials: [String]) -> String {
         var prompt = """
         Below are summaries of consecutive parts of a single thread, in order.
         Merge them into one summary in \(options.style.instruction), keeping the >>N citations.
         Remove repetition. Keep the strongest points and any unresolved disagreement.
 
         """
-        if !imagePosts.isEmpty {
-            prompt += "The most-discussed images are attached after this message, in this post order: "
-            prompt += imagePosts.map { ">>\($0.value)" }.joined(separator: ", ")
-            prompt += ". Describe what they show.\n\n"
-        }
         for (index, partial) in partials.enumerated() {
             prompt += "<part-\(index + 1)>\n\(partial)\n</part-\(index + 1)>\n\n"
         }

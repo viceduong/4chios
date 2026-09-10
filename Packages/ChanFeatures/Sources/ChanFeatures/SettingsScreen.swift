@@ -67,8 +67,6 @@ public struct SettingsScreen: View {
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
 
-                    Toggle("Send thread images", isOn: $settings.aiSendsImages)
-
                     if settings.isAIConfigured {
                         Label("Ready", systemImage: "checkmark.seal.fill")
                             .font(.caption)
@@ -79,7 +77,7 @@ public struct SettingsScreen: View {
                             .foregroundColor(theme.danger)
                     }
 
-                    Text("Summaries send this thread's post text, plus up to 6 non-spoiler images when enabled, to the endpoint above. The key is kept in the Keychain, never in preferences.")
+                    Text("Summaries send this thread's post text to the endpoint above. Images and videos are never uploaded. The key is kept in the Keychain, never in preferences.")
                         .font(.caption2)
                         .foregroundColor(theme.secondaryText)
                 }

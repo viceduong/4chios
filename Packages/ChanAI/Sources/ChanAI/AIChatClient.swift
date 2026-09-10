@@ -2,19 +2,6 @@ import ChanAPI
 import ChanCore
 import Foundation
 
-/// An image attached to a prompt, already encoded as JPEG by the platform layer.
-public struct AIImage: Sendable, Equatable {
-    public let postNumber: PostNumber
-    public let data: Data
-    public let mimeType: String
-
-    public init(postNumber: PostNumber, data: Data, mimeType: String = "image/jpeg") {
-        self.postNumber = postNumber
-        self.data = data
-        self.mimeType = mimeType
-    }
-}
-
 public struct AIChatMessage: Sendable {
     public enum Role: String, Sendable {
         case system
@@ -24,12 +11,10 @@ public struct AIChatMessage: Sendable {
 
     public var role: Role
     public var text: String
-    public var images: [AIImage]
 
-    public init(role: Role, text: String, images: [AIImage] = []) {
+    public init(role: Role, text: String) {
         self.role = role
         self.text = text
-        self.images = images
     }
 }
 
@@ -60,8 +45,9 @@ public enum AIChatError: Error, Equatable, Sendable {
 
 /// A minimal OpenAI-compatible chat client.
 ///
-/// Deliberately non-streaming: a summary is a single request/response, and
-/// progress is reported per chunk by the summarizer instead.
+/// Text-only by design: summaries are built from post text, so there is no image
+/// plumbing to keep working. A summary is a single request/response, and progress
+/// is reported per chunk by the summarizer.
 public struct AIChatClient: Sendable {
     private let transport: ChanTransport
     public let configuration: AIConfiguration
@@ -118,7 +104,7 @@ public struct AIChatClient: Sendable {
     static func encodeRequestBody(messages: [AIChatMessage], configuration: AIConfiguration) throws -> Data {
         let payload = ChatCompletionRequest(
             model: configuration.model,
-            messages: messages.map(RequestMessage.init),
+            messages: messages.map { RequestMessage(role: $0.role.rawValue, content: $0.text) },
             maxTokens: configuration.maximumTokens,
             temperature: configuration.temperature,
             stream: false
@@ -144,53 +130,7 @@ private struct ChatCompletionRequest: Encodable {
 
 private struct RequestMessage: Encodable {
     let role: String
-    let content: Content
-
-    init(_ message: AIChatMessage) {
-        role = message.role.rawValue
-        content = message.images.isEmpty
-            ? .text(message.text)
-            : .parts(
-                [.init(type: "text", text: message.text)]
-                    + message.images.map { image in
-                        .init(
-                            type: "image_url",
-                            imageURL: .init(url: "data:\(image.mimeType);base64,\(image.data.base64EncodedString())")
-                        )
-                    }
-            )
-    }
-
-    /// `content` is either a bare string or an array of parts; OpenAI accepts both.
-    enum Content: Encodable {
-        case text(String)
-        case parts([ContentPart])
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-            switch self {
-            case let .text(value):
-                try container.encode(value)
-            case let .parts(value):
-                try container.encode(value)
-            }
-        }
-    }
-
-    struct ContentPart: Encodable {
-        let type: String
-        var text: String?
-        var imageURL: ImageURL?
-
-        enum CodingKeys: String, CodingKey {
-            case type, text
-            case imageURL = "image_url"
-        }
-
-        struct ImageURL: Encodable {
-            let url: String
-        }
-    }
+    let content: String
 }
 
 private struct ChatCompletionResponse: Decodable {
