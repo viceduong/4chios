@@ -11,18 +11,23 @@ public struct AIConfiguration: Sendable, Equatable {
         public var baseURL: URL
         public var apiKey: String
         public var model: String
+        /// Up to ten results are included in the per-request fee, so asking for
+        /// fewer costs the same and only weakens the answer.
         public var maximumResults: Int
+        public var engine: AISearchEngine
 
         public init(
             baseURL: URL = AIConfiguration.openRouterBaseURL,
             apiKey: String = "",
             model: String = AIConfiguration.openRouterSearchModel,
-            maximumResults: Int = 4
+            maximumResults: Int = 10,
+            engine: AISearchEngine = .exaAuto
         ) {
             self.baseURL = baseURL
             self.apiKey = apiKey
             self.model = model
             self.maximumResults = maximumResults
+            self.engine = engine
         }
 
         public var isConfigured: Bool {

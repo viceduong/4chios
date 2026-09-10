@@ -97,6 +97,15 @@ public struct SettingsScreen: View {
                         .disableAutocorrection(true)
                         .font(.system(.footnote, design: .monospaced))
 
+                    Picker("Engine", selection: $settings.aiSearchEngine) {
+                        ForEach(AISearchEngine.allCases) { engine in
+                            Text("\(engine.label) - \(engine.costLabel)").tag(engine)
+                        }
+                    }
+                    Text("\(settings.aiSearchEngine.detail) Each search includes up to 10 results for the same fee, and the fee is charged per search, not per result.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+
                     Label(
                         settings.canSearchTheWeb ? "Chat can search the web" : "Add a key to let chat search the web",
                         systemImage: settings.canSearchTheWeb ? "globe" : "key"

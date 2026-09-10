@@ -125,6 +125,12 @@ public final class ChanSettings: ObservableObject {
         didSet { ChanKeychain.set(aiSearchAPIKey, for: Keys.aiSearchAPIKey) }
     }
 
+    /// Which search backend the plugin uses. Pricing is per request, and
+    /// Parallel Turbo is seven times cheaper than the Exa default.
+    @Published public var aiSearchEngine: AISearchEngine {
+        didSet { save() }
+    }
+
     public var isAIConfigured: Bool {
         !aiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -143,7 +149,8 @@ public final class ChanSettings: ObservableObject {
                 ? AIConfiguration.SearchConfiguration(
                     baseURL: URL(string: aiSearchEndpoint) ?? AIConfiguration.openRouterBaseURL,
                     apiKey: aiSearchAPIKey,
-                    model: aiSearchModel.isEmpty ? AIConfiguration.openRouterSearchModel : aiSearchModel
+                    model: aiSearchModel.isEmpty ? AIConfiguration.openRouterSearchModel : aiSearchModel,
+                    engine: aiSearchEngine
                 )
                 : nil
         )
@@ -167,6 +174,7 @@ public final class ChanSettings: ObservableObject {
         aiSearchEndpoint = defaults.string(forKey: Keys.aiSearchEndpoint)
             ?? AIConfiguration.openRouterBaseURL.absoluteString
         aiSearchModel = defaults.string(forKey: Keys.aiSearchModel) ?? AIConfiguration.openRouterSearchModel
+        aiSearchEngine = AISearchEngine(rawValue: defaults.string(forKey: Keys.aiSearchEngine) ?? "") ?? .exaAuto
 
         // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
         // so local builds work without pasting anything. Never committed.
@@ -223,6 +231,7 @@ public final class ChanSettings: ObservableObject {
         defaults.set(aiModel, forKey: Keys.aiModel)
         defaults.set(aiSearchEndpoint, forKey: Keys.aiSearchEndpoint)
         defaults.set(aiSearchModel, forKey: Keys.aiSearchModel)
+        defaults.set(aiSearchEngine.rawValue, forKey: Keys.aiSearchEngine)
         // The API key deliberately never reaches UserDefaults.
     }
 
@@ -238,5 +247,6 @@ public final class ChanSettings: ObservableObject {
         static let aiSearchEndpoint = "settings.aiSearchEndpoint"
         static let aiSearchModel = "settings.aiSearchModel"
         static let aiSearchAPIKey = "settings.aiSearchAPIKey"
+        static let aiSearchEngine = "settings.aiSearchEngine"
     }
 }

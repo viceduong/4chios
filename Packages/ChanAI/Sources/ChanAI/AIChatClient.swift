@@ -154,7 +154,7 @@ public struct AIChatClient: Sendable {
             maxTokens: maximumTokens,
             temperature: temperature,
             stream: false,
-            plugins: search.map { [SearchPlugin(id: "web", maxResults: $0.maximumResults)] }
+            plugins: search.map { [SearchPlugin(engine: $0.engine, maxResults: $0.maximumResults)] }
         )
         return try JSONEncoder().encode(payload)
     }
@@ -194,16 +194,6 @@ private struct ChatCompletionRequest: Encodable {
 private struct RequestMessage: Encodable {
     let role: String
     let content: String
-}
-
-struct SearchPlugin: Encodable {
-    let id: String
-    let maxResults: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case maxResults = "max_results"
-    }
 }
 
 struct Annotation: Decodable {

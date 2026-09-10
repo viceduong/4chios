@@ -81,11 +81,60 @@ Has a server-side search plugin, verified working:
 
 ```json
 { "model": "google/gemini-2.5-flash-lite",
-  "plugins": [{ "id": "web", "max_results": 4 }], ... }
+  "plugins": [{ "id": "web", "max_results": 10 }], ... }
 ```
 
 Citations come back as `choices[0].message.annotations[].url_citation` with
-`{ url, title }`. Costs roughly $4 per 1000 results.
+`{ url, title }`.
+
+### Pricing is per request, not per result
+
+Each request includes **up to 10 results**; further results cost $0.001 each.
+Asking for two results costs exactly the same as asking for ten, so a small
+`max_results` saves nothing and only weakens the answer.
+
+| Engine / mode | Per request | Per 1,000 | Notes |
+| --- | --- | --- | --- |
+| Exa `auto` (plugin default) | $0.007 | $7 | Keyword + embeddings |
+| Exa `instant` / `fast` | $0.007 | $7 | Lower latency |
+| Exa `deep-lite` / `deep` | $0.012 | $12 | 4–15 s |
+| Exa `deep-reasoning` | $0.015 | $15 | 12–40 s |
+| Parallel `turbo` / `fast` | $0.001 | $1 | ~200 ms, English + Japanese only |
+| Parallel `basic` / `advanced` | $0.005 | $5 | ~1–3 s, broad language support |
+| Perplexity | $0.005 | $5 | |
+| Firecrawl | your Firecrawl credits | — | 2 credits / 10 results + 5 per result scrape |
+| Native (Anthropic, Google, OpenAI, Perplexity, SpaceXAI) | provider passthrough | — | |
+
+Non-native models are served by **Exa**. Native search applies to the model
+families listed above; `gemini-2.5-flash-lite` measured as Exa, so the plugin
+path does not get Google's native grounding.
+
+### Measured, not assumed
+
+Same question, four configurations:
+
+| Configuration | Plugin fee | Model | Total |
+| --- | --- | --- | --- |
+| No plugin (control) | — | $0.000007 | $0.000007 |
+| Exa auto, `max_results: 2` | $0.007000 | $0.000054 | $0.007054 |
+| Exa auto, `max_results: 10` | $0.007000 | $0.000199 | $0.007199 |
+| Parallel turbo, `max_results: 10` | $0.001000 | $0.000536 | $0.001536 |
+
+Two things fall out of this. The plugin fee is flat across 2 and 10 results,
+confirming the per-request model. And the model cost rises with result count —
+Exa returns 2,000–4,000 character highlights per result, so ten results added
+1,889 prompt tokens against 436 for two — but it stays in the ten-thousandths of
+a dollar, i.e. the search fee is ~97% of the cost of a search turn.
+
+Parallel turbo is **7× cheaper per search** than the Exa default, at the price
+of English/Japanese only.
+
+### Server tool alternative
+
+OpenRouter also exposes `openrouter:web_search` as a *server tool*, which lets
+the model decide when to search instead of running once per request. The plugin
+path always searches when enabled — a `max_results: 2` plugin ran and billed on
+"what is 2+2". The server tool would avoid that; it is not used here yet.
 
 ## What the app does
 
