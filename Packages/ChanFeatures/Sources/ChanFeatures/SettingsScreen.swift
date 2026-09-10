@@ -97,6 +97,15 @@ public struct SettingsScreen: View {
                         .disableAutocorrection(true)
                         .font(.system(.footnote, design: .monospaced))
 
+                    Picker("Search when", selection: $settings.aiSearchMode) {
+                        ForEach(AISearchMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    Text(settings.aiSearchMode.detail)
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+
                     Picker("Engine", selection: $settings.aiSearchEngine) {
                         ForEach(AISearchEngine.allCases) { engine in
                             Text("\(engine.label) - \(engine.costLabel)").tag(engine)

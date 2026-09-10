@@ -125,11 +125,16 @@ public struct AIChatClient: Sendable {
             guard let text = choice?.message.content, !text.isEmpty else {
                 throw AIChatError.decoding("The response contained no text.")
             }
+            // With the plugin, a search always ran. With the server tool the
+            // model decides, so citations are the evidence that it did.
+            let sources = Self.sources(from: choice?.message.annotations ?? [])
+            let searched = useSearch && (target?.mode == .plugin || !sources.isEmpty)
+
             return AIChatReply(
                 text: text,
-                sources: Self.sources(from: choice?.message.annotations ?? []),
+                sources: sources,
                 model: decoded.model ?? model,
-                usedWebSearch: useSearch,
+                usedWebSearch: searched,
                 usage: decoded.usage?.normalised
             )
         } catch let error as AIChatError {
@@ -154,7 +159,11 @@ public struct AIChatClient: Sendable {
             maxTokens: maximumTokens,
             temperature: temperature,
             stream: false,
-            plugins: search.map { [SearchPlugin(engine: $0.engine, maxResults: $0.maximumResults)] }
+            plugins: search.filter { $0.mode == .plugin }
+                .map { [SearchPlugin(engine: $0.engine, maxResults: $0.maximumResults)] },
+            tools: search.filter { $0.mode == .serverTool }
+                .map { [ServerTool(engine: $0.engine, maxResults: $0.maximumResults,
+                                   maxTotalResults: $0.maximumTotalResults)] }
         )
         return try JSONEncoder().encode(payload)
     }
@@ -182,11 +191,13 @@ private struct ChatCompletionRequest: Encodable {
     let maxTokens: Int
     let temperature: Double
     let stream: Bool
-    /// OpenRouter's server-side search plugin. Nil for the plain endpoint.
+    /// OpenRouter's `web` plugin path. Nil unless that mode is selected.
     let plugins: [SearchPlugin]?
+    /// OpenRouter's `openrouter:web_search` server tool path.
+    let tools: [ServerTool]?
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, temperature, stream, plugins
+        case model, messages, temperature, stream, plugins, tools
         case maxTokens = "max_tokens"
     }
 }

@@ -129,12 +129,37 @@ a dollar, i.e. the search fee is ~97% of the cost of a search turn.
 Parallel turbo is **7× cheaper per search** than the Exa default, at the price
 of English/Japanese only.
 
-### Server tool alternative
+### Server tool (now the default path)
 
-OpenRouter also exposes `openrouter:web_search` as a *server tool*, which lets
-the model decide when to search instead of running once per request. The plugin
-path always searches when enabled — a `max_results: 2` plugin ran and billed on
-"what is 2+2". The server tool would avoid that; it is not used here yet.
+`openrouter:web_search` is a *server tool*: the model decides whether to search,
+OpenRouter executes it, and it can run zero or more times per request. Measured
+against the live API with the same model:
+
+| Question | Cost | Search fee | Citations |
+| --- | --- | --- | --- |
+| "What is 2+2?" | $0.000037 | **$0.000000** | 0 |
+| "Current stable Python version?" | $0.007210 | $0.007000 | 5 |
+
+The same question through the plugin would have been billed $0.007 either way.
+That is the whole argument for the server tool: enabling search costs nothing on
+turns that do not need it.
+
+Request shape:
+
+```json
+{ "tools": [{ "type": "openrouter:web_search",
+              "parameters": { "engine": "exa", "max_results": 10,
+                              "max_total_results": 20 } }] }
+```
+
+`engine` accepts `auto`, `native`, `exa`, `firecrawl`, `parallel` or
+`perplexity`; `max_total_results` caps the total across every search in one
+request, which stops a model that keeps searching from running up a bill.
+Citations arrive in the same `annotations[].url_citation` shape as the plugin,
+so source parsing is shared. Server tools are in **beta**.
+
+Because the model decides, `usedWebSearch` on the reply is derived from whether
+citations came back, not from whether search was requested.
 
 ## What the app does
 

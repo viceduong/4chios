@@ -140,3 +140,109 @@ final class AISearchEngineTests: XCTestCase {
         XCTAssertEqual(plugins.first?["max_results"] as? Int, 10)
     }
 }
+
+final class AISearchModeTests: XCTestCase {
+    private func body(_ configuration: AIConfiguration) async throws -> [String: Any] {
+        let payload: [String: Any] = ["model": "m", "choices": [["message": ["content": "ok"]]],
+                                      "usage": ["prompt_tokens": 5, "completion_tokens": 1]]
+        let transport = MockAITransport(responses: [
+            ChanHTTPResponse(statusCode: 200, body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()),
+        ])
+        let client = AIChatClient(transport: transport, configuration: configuration)
+        _ = try await client.complete([AIChatMessage(role: .user, text: "q")], searching: true)
+        let request = try XCTUnwrap(transport.requests.first)
+        return try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]
+        )
+    }
+
+    private func configuration(_ mode: AISearchMode) -> AIConfiguration {
+        AIConfiguration(
+            apiKey: "gc",
+            search: AIConfiguration.SearchConfiguration(
+                apiKey: "or", maximumResults: 10, maximumTotalResults: 20,
+                engine: .parallelTurbo, mode: mode
+            )
+        )
+    }
+
+    func testServerToolModeSendsToolsAndNoPlugin() async throws {
+        let payload = try await body(configuration(.serverTool))
+
+        XCTAssertNil(payload["plugins"], "the plugin must not be sent in server-tool mode")
+        let tools = try XCTUnwrap(payload["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.count, 1)
+        XCTAssertEqual(tools[0]["type"] as? String, "openrouter:web_search")
+
+        let parameters = try XCTUnwrap(tools[0]["parameters"] as? [String: Any])
+        XCTAssertEqual(parameters["engine"] as? String, "parallel")
+        XCTAssertEqual(parameters["max_results"] as? Int, 10)
+        XCTAssertEqual(parameters["max_total_results"] as? Int, 20)
+    }
+
+    func testPluginModeSendsPluginsAndNoTools() async throws {
+        let payload = try await body(configuration(.plugin))
+
+        XCTAssertNil(payload["tools"], "the server tool must not be sent in plugin mode")
+        let plugins = try XCTUnwrap(payload["plugins"] as? [[String: Any]])
+        XCTAssertEqual(plugins.first?["id"] as? String, "web")
+        XCTAssertEqual(plugins.first?["engine"] as? String, "parallel")
+    }
+
+    func testServerToolModeDoesNotClaimASearchWhenNothingWasCited() async throws {
+        // "What is 2+2" style: the model answers without searching.
+        let payload: [String: Any] = ["model": "m", "choices": [["message": ["content": "4"]]]]
+        let transport = MockAITransport(responses: [
+            ChanHTTPResponse(statusCode: 200, body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()),
+        ])
+        let client = AIChatClient(transport: transport, configuration: configuration(.serverTool))
+        let reply = try await client.complete([AIChatMessage(role: .user, text: "2+2?")], searching: true)
+
+        XCTAssertFalse(reply.usedWebSearch, "no citations means no search was run")
+        XCTAssertTrue(reply.sources.isEmpty)
+    }
+
+    func testServerToolModeReportsASearchWhenCited() async throws {
+        let payload: [String: Any] = [
+            "model": "m",
+            "choices": [["message": [
+                "content": "Python 3.14.7",
+                "annotations": [["type": "url_citation",
+                                 "url_citation": ["url": "https://python.org", "title": "Python"]]],
+            ]]],
+        ]
+        let transport = MockAITransport(responses: [
+            ChanHTTPResponse(statusCode: 200, body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()),
+        ])
+        let client = AIChatClient(transport: transport, configuration: configuration(.serverTool))
+        let reply = try await client.complete([AIChatMessage(role: .user, text: "python?")], searching: true)
+
+        XCTAssertTrue(reply.usedWebSearch)
+        XCTAssertEqual(reply.sources.first?.url, "https://python.org")
+    }
+
+    func testServerToolIsTheDefault() {
+        let configuration = AIConfiguration.SearchConfiguration(apiKey: "k")
+        XCTAssertEqual(configuration.mode, .serverTool,
+                       "the model-decides path is free on turns that do not search")
+        XCTAssertEqual(configuration.maximumTotalResults, 20)
+    }
+
+    func testAPlainTurnSendsNeitherPluginNorTool() async throws {
+        let payload: [String: Any] = ["model": "m", "choices": [["message": ["content": "ok"]]]]
+        let transport = MockAITransport(responses: [
+            ChanHTTPResponse(statusCode: 200, body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()),
+        ])
+        let client = AIChatClient(transport: transport, configuration: configuration(.serverTool))
+        _ = try await client.complete([AIChatMessage(role: .user, text: "hi")], searching: false)
+
+        let request = try XCTUnwrap(transport.requests.first)
+        let decoded = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]
+        )
+        XCTAssertNil(decoded["tools"])
+        XCTAssertNil(decoded["plugins"])
+        XCTAssertEqual(request.url.absoluteString, "https://api.generalcompute.com/v1/chat/completions",
+                       "a turn without search goes to the primary endpoint")
+    }
+}

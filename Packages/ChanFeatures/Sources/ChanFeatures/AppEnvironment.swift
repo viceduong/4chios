@@ -131,6 +131,12 @@ public final class ChanSettings: ObservableObject {
         didSet { save() }
     }
 
+    /// Whether the model decides when to search (free on turns it does not), or
+    /// the plugin searches on every message.
+    @Published public var aiSearchMode: AISearchMode {
+        didSet { save() }
+    }
+
     public var isAIConfigured: Bool {
         !aiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -150,7 +156,8 @@ public final class ChanSettings: ObservableObject {
                     baseURL: URL(string: aiSearchEndpoint) ?? AIConfiguration.openRouterBaseURL,
                     apiKey: aiSearchAPIKey,
                     model: aiSearchModel.isEmpty ? AIConfiguration.openRouterSearchModel : aiSearchModel,
-                    engine: aiSearchEngine
+                    engine: aiSearchEngine,
+                    mode: aiSearchMode
                 )
                 : nil
         )
@@ -175,6 +182,7 @@ public final class ChanSettings: ObservableObject {
             ?? AIConfiguration.openRouterBaseURL.absoluteString
         aiSearchModel = defaults.string(forKey: Keys.aiSearchModel) ?? AIConfiguration.openRouterSearchModel
         aiSearchEngine = AISearchEngine(rawValue: defaults.string(forKey: Keys.aiSearchEngine) ?? "") ?? .exaAuto
+        aiSearchMode = AISearchMode(rawValue: defaults.string(forKey: Keys.aiSearchMode) ?? "") ?? .serverTool
 
         // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
         // so local builds work without pasting anything. Never committed.
@@ -232,6 +240,7 @@ public final class ChanSettings: ObservableObject {
         defaults.set(aiSearchEndpoint, forKey: Keys.aiSearchEndpoint)
         defaults.set(aiSearchModel, forKey: Keys.aiSearchModel)
         defaults.set(aiSearchEngine.rawValue, forKey: Keys.aiSearchEngine)
+        defaults.set(aiSearchMode.rawValue, forKey: Keys.aiSearchMode)
         // The API key deliberately never reaches UserDefaults.
     }
 
@@ -248,5 +257,6 @@ public final class ChanSettings: ObservableObject {
         static let aiSearchModel = "settings.aiSearchModel"
         static let aiSearchAPIKey = "settings.aiSearchAPIKey"
         static let aiSearchEngine = "settings.aiSearchEngine"
+        static let aiSearchMode = "settings.aiSearchMode"
     }
 }

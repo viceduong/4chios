@@ -14,20 +14,28 @@ public struct AIConfiguration: Sendable, Equatable {
         /// Up to ten results are included in the per-request fee, so asking for
         /// fewer costs the same and only weakens the answer.
         public var maximumResults: Int
+        /// Across every search in one request, so a model that keeps searching
+        /// cannot run up a bill.
+        public var maximumTotalResults: Int
         public var engine: AISearchEngine
+        public var mode: AISearchMode
 
         public init(
             baseURL: URL = AIConfiguration.openRouterBaseURL,
             apiKey: String = "",
             model: String = AIConfiguration.openRouterSearchModel,
             maximumResults: Int = 10,
-            engine: AISearchEngine = .exaAuto
+            maximumTotalResults: Int = 20,
+            engine: AISearchEngine = .exaAuto,
+            mode: AISearchMode = .serverTool
         ) {
             self.baseURL = baseURL
             self.apiKey = apiKey
             self.model = model
             self.maximumResults = maximumResults
+            self.maximumTotalResults = maximumTotalResults
             self.engine = engine
+            self.mode = mode
         }
 
         public var isConfigured: Bool {

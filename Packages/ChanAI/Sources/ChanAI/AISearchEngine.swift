@@ -73,6 +73,43 @@ public enum AISearchEngine: String, CaseIterable, Codable, Sendable, Identifiabl
     }
 }
 
+/// How OpenRouter is asked to search.
+///
+/// The two paths differ in who decides and how often they run, which is what
+/// drives the cost. Measured against the live API:
+///
+/// | | plugin | server tool |
+/// | --- | --- | --- |
+/// | who decides | nobody, it always runs | the model |
+/// | calls per request | exactly 1 | 0 to N |
+/// | "what is 2+2" | $0.007 charged | $0.000037, no search |
+/// | a real search | $0.007 | $0.007 |
+public enum AISearchMode: String, CaseIterable, Codable, Sendable, Identifiable {
+    /// The model calls `openrouter:web_search` only when it needs to. Nothing is
+    /// charged on turns that do not search.
+    case serverTool
+    /// The `web` plugin, which searches once on every request it is enabled for.
+    case plugin
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .serverTool: return "When needed (server tool)"
+        case .plugin: return "Every message (plugin)"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .serverTool:
+            return "The model decides. Nothing is charged on messages that do not need a search."
+        case .plugin:
+            return "Searches on every message you send with search enabled, whether or not it helps."
+        }
+    }
+}
+
 /// The `plugins` entry sent to OpenRouter.
 struct SearchPlugin: Encodable {
     let id: String
@@ -90,5 +127,33 @@ struct SearchPlugin: Encodable {
         self.maxResults = maxResults
         self.engine = engine.engineParameter
         mode = engine.modeParameter
+    }
+}
+
+/// The `tools` entry for the server-tool path.
+struct ServerTool: Encodable {
+    let type: String
+    let parameters: Parameters?
+
+    struct Parameters: Encodable {
+        let engine: String?
+        let maxResults: Int?
+        /// Caps the total across every search the model runs in one request.
+        let maxTotalResults: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case engine
+            case maxResults = "max_results"
+            case maxTotalResults = "max_total_results"
+        }
+    }
+
+    init(engine: AISearchEngine, maxResults: Int, maxTotalResults: Int) {
+        type = "openrouter:web_search"
+        parameters = Parameters(
+            engine: engine.engineParameter,
+            maxResults: maxResults,
+            maxTotalResults: maxTotalResults
+        )
     }
 }
