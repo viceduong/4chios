@@ -206,6 +206,11 @@ final class CatalogCell: UICollectionViewCell {
 
     func configure(post: Post, board: BoardID, theme: ChanTheme, showThumbnail: Bool) {
         card.backgroundColor = UIColor(theme.surface)
+        // Show the whole thumbnail, undistorted. The box is a fixed size, so a
+        // non-matching aspect ratio letterboxes against the card background
+        // instead of being cropped or stretched.
+        thumbnail.scaling = .fit
+        thumbnail.placeholderColor = UIColor(theme.elevated)
         subjectLabel.textColor = UIColor(theme.primaryText)
         statsLabel.textColor = UIColor(theme.secondaryText)
         stickyTag.backgroundColor = UIColor(theme.accent)

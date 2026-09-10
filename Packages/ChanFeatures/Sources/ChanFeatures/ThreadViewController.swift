@@ -162,7 +162,10 @@ final class PostCell: UICollectionViewCell {
     private let footerLabel = UILabel()
     private let opTag = ChanTagLabel()
 
-    private var mediaHeightConstraint: NSLayoutConstraint!
+    private var mediaZeroHeightConstraint: NSLayoutConstraint!
+    private var mediaMinHeightConstraint: NSLayoutConstraint!
+    private var mediaMaxHeightConstraint: NSLayoutConstraint!
+    private var mediaAspectConstraint: NSLayoutConstraint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -207,8 +210,10 @@ final class PostCell: UICollectionViewCell {
         stack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stack)
 
-        mediaHeightConstraint = mediaView.heightAnchor.constraint(equalToConstant: 0)
-        mediaHeightConstraint.isActive = true
+        mediaZeroHeightConstraint = mediaView.heightAnchor.constraint(equalToConstant: 0)
+        mediaMinHeightConstraint = mediaView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+        mediaMaxHeightConstraint = mediaView.heightAnchor.constraint(lessThanOrEqualToConstant: 340)
+        mediaZeroHeightConstraint.isActive = true
 
         NSLayoutConstraint.activate([
             container.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
@@ -226,6 +231,8 @@ final class PostCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         mediaView.reset()
+        mediaAspectConstraint?.isActive = false
+        mediaAspectConstraint = nil
         bodyTextView.configure(body: PostBody(runs: []), theme: .dark, fontSize: 15)
         onQuoteTap = nil
         onLinkTap = nil
@@ -244,12 +251,32 @@ final class PostCell: UICollectionViewCell {
         let body = PostHTMLParser.parse(post.commentHTML ?? "")
         bodyTextView.configure(body: body, theme: theme, fontSize: fontSize)
 
+        // Size the media box to the attachment's real aspect ratio, clamped to a
+        // sane range. The box matches the image exactly, so `.fit` never
+        // letterboxes in the common case and never distorts in any case.
+        mediaAspectConstraint?.isActive = false
+        mediaAspectConstraint = nil
+
         if let attachment = post.attachment {
-            mediaHeightConstraint.constant = 200
+            mediaZeroHeightConstraint.isActive = false
+            mediaMinHeightConstraint.isActive = true
+            mediaMaxHeightConstraint.isActive = true
+
+            let ratio = attachment.aspectRatio > 0 ? attachment.aspectRatio : 1
+            let aspect = mediaView.heightAnchor.constraint(
+                equalTo: mediaView.widthAnchor,
+                multiplier: 1 / ratio
+            )
+            aspect.priority = .defaultHigh
+            aspect.isActive = true
+            mediaAspectConstraint = aspect
+
             mediaView.isHidden = false
             mediaView.configure(attachment: attachment, board: board, theme: theme)
         } else {
-            mediaHeightConstraint.constant = 0
+            mediaMinHeightConstraint.isActive = false
+            mediaMaxHeightConstraint.isActive = false
+            mediaZeroHeightConstraint.isActive = true
             mediaView.isHidden = true
             mediaView.reset()
         }
@@ -351,6 +378,7 @@ final class MediaThumbnailView: UIView {
         layer.cornerRadius = ChanRadius.small
         layer.cornerCurve = .continuous
 
+        imageView.scaling = .fit
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
 

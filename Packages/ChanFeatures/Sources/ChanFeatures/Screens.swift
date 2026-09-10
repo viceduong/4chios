@@ -303,7 +303,7 @@ struct ZoomableImageView: UIViewRepresentable {
 
         let imageView = ChanImageView()
         imageView.cornerRadius = 0
-        imageView.contentMode = .scaleAspectFit
+        imageView.scaling = .fit
         imageView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(imageView)
 
