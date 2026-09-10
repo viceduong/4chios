@@ -6,7 +6,85 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// The board catalog as a two-column card grid.
+/// Layout constants and text measurement for catalog cards.
+///
+/// The card is a fixed height and the **image takes whatever the text does not
+/// use**, so no card ever shows a gap: a thread with a one-line subject gets a
+/// taller image instead of empty space, and a two-line subject shortens it.
+enum CatalogMetrics {
+    /// Total card height with thumbnails shown.
+    static let cardHeightWithImages: CGFloat = 206
+    /// Total card height when thumbnails are switched off; just text.
+    static let cardHeightWithoutImages: CGFloat = 68
+    /// The image never collapses, even for a very long subject.
+    static let minimumImageHeight: CGFloat = 84
+
+    /// Horizontal inset for the text block.
+    static let textPadding: CGFloat = 7
+    /// Gap between the image and the subject.
+    static let imageLabelSpacing: CGFloat = 6
+    static let subjectStatsSpacing: CGFloat = 2
+    /// Gap under the statistics line.
+    static let bottomPadding: CGFloat = 8
+
+    static let subjectFont = UIFont.systemFont(ofSize: 13, weight: .semibold)
+    static let statsFont = UIFont.systemFont(ofSize: 11, weight: .regular)
+    static let maximumSubjectLines = 2
+
+    static let columnSpacing: CGFloat = 8
+    static let rowSpacing: CGFloat = 8
+    static let sectionInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 28, trailing: 8)
+
+    static func cardHeight(showThumbnails: Bool) -> CGFloat {
+        showThumbnails ? cardHeightWithImages : cardHeightWithoutImages
+    }
+
+    /// The text shown under the thumbnail. Never empty, so the measurement below
+    /// always has something to measure.
+    static func displaySubject(for post: Post) -> String {
+        let subject = post.subject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let subject, !subject.isEmpty else { return "No subject" }
+        return subject
+    }
+
+    static func stats(for post: Post) -> String {
+        "R: \(ChanFormat.count(post.replies ?? 0))   I: \(ChanFormat.count(post.images ?? 0))"
+    }
+
+    /// Height the subject label will actually occupy, capped at two lines.
+    static func subjectHeight(of text: String, cardWidth: CGFloat) -> CGFloat {
+        let available = max(cardWidth - textPadding * 2, 1)
+        let bounding = (text as NSString).boundingRect(
+            with: CGSize(width: available, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: subjectFont],
+            context: nil
+        )
+        // A point of slack stops rounding from clipping the second line.
+        let measured = ceil(bounding.height) + 1
+        return min(measured, ceil(subjectFont.lineHeight) * CGFloat(maximumSubjectLines))
+    }
+
+    /// Everything between the bottom of the image and the bottom of the card:
+    /// the gap below the image, the two label lines, and the bottom padding.
+    static func textBlockHeight(for post: Post, cardWidth: CGFloat) -> CGFloat {
+        imageLabelSpacing
+            + subjectHeight(of: displaySubject(for: post), cardWidth: cardWidth)
+            + subjectStatsSpacing
+            + ceil(statsFont.lineHeight)
+            + bottomPadding
+    }
+
+    /// The image fills all the space the text does not need, so the label stack
+    /// lands exactly on the card's bottom padding and nothing is left over.
+    static func imageHeight(for post: Post, cardWidth: CGFloat, showThumbnails: Bool) -> CGFloat {
+        guard showThumbnails else { return 0 }
+        let available = cardHeight(showThumbnails: true) - textBlockHeight(for: post, cardWidth: cardWidth)
+        return max(available, minimumImageHeight)
+    }
+}
+
+/// The board catalog as a tight two-column card grid.
 public final class CatalogViewController: UIViewController {
     private enum Section { case main }
 
@@ -19,6 +97,8 @@ public final class CatalogViewController: UIViewController {
 
     private var theme: ChanTheme
     private var showThumbnails: Bool
+    private var cancellables = Set<AnyCancellable>()
+    private var lastViewWidth: CGFloat = 0
 
     public init(store: CatalogStore, theme: ChanTheme, showThumbnails: Bool, onSelect: @escaping (Post) -> Void) {
         self.store = store
@@ -37,39 +117,71 @@ public final class CatalogViewController: UIViewController {
         view.backgroundColor = UIColor(theme.background)
         configureCollectionView()
         configureDataSource()
+
         store.$threads
             .receive(on: RunLoop.main)
             .sink { [weak self] posts in self?.apply(posts) }
             .store(in: &cancellables)
     }
 
-    public func applyTheme(_ theme: ChanTheme, showThumbnails: Bool) {
-        self.theme = theme
-        self.showThumbnails = showThumbnails
-        view.backgroundColor = UIColor(theme.background)
+    public override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Cells recompute their image height from their own width, so a width
+        // change needs a reload. Guarded on the width: reloading unconditionally
+        // here would retrigger layout forever.
+        let width = view.bounds.width
+        guard abs(width - lastViewWidth) > 0.5 else { return }
+        lastViewWidth = width
         collectionView.reloadData()
     }
 
-    private var cancellables = Set<AnyCancellable>()
+    public func applyTheme(_ theme: ChanTheme, showThumbnails: Bool) {
+        let thumbnailsChanged = showThumbnails != self.showThumbnails
+        self.theme = theme
+        self.showThumbnails = showThumbnails
+        view.backgroundColor = UIColor(theme.background)
 
-    private func configureCollectionView() {
+        if thumbnailsChanged {
+            collectionView.setCollectionViewLayout(makeLayout(showThumbnails: showThumbnails), animated: false)
+        }
+        collectionView.reloadData()
+    }
+
+    // MARK: - Layout
+
+    private func makeLayout(showThumbnails: Bool) -> UICollectionViewCompositionalLayout {
         let item = NSCollectionLayoutItem(
             layoutSize: NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(0.5),
                 heightDimension: .fractionalHeight(1)
             )
         )
-        item.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+        item.contentInsets = NSDirectionalEdgeInsets(
+            top: 0,
+            leading: CatalogMetrics.columnSpacing / 2,
+            bottom: 0,
+            trailing: CatalogMetrics.columnSpacing / 2
+        )
 
         let group = NSCollectionLayoutGroup.horizontal(
-            layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(226)),
+            layoutSize: NSCollectionLayoutSize(
+                widthDimension: .fractionalWidth(1),
+                heightDimension: .absolute(CatalogMetrics.cardHeight(showThumbnails: showThumbnails))
+            ),
             subitems: [item]
         )
 
         let section = NSCollectionLayoutSection(group: group)
-        section.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 32, trailing: 8)
+        section.contentInsets = CatalogMetrics.sectionInsets
+        section.interGroupSpacing = CatalogMetrics.rowSpacing
+        return UICollectionViewCompositionalLayout(section: section)
+    }
 
-        collectionView = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewCompositionalLayout(section: section))
+    private func configureCollectionView() {
+        collectionView = UICollectionView(
+            frame: .zero,
+            collectionViewLayout: makeLayout(showThumbnails: showThumbnails)
+        )
         collectionView.backgroundColor = .clear
         collectionView.alwaysBounceVertical = true
         collectionView.delegate = self
@@ -111,7 +223,7 @@ public final class CatalogViewController: UIViewController {
         var snapshot = NSDiffableDataSourceSnapshot<Section, PostNumber>()
         snapshot.appendSections([.main])
         snapshot.appendItems(posts.map(\.no), toSection: .main)
-        dataSource.apply(snapshot, animatingDifferences: posts.count != postsByNumber.count ? false : true)
+        dataSource.apply(snapshot, animatingDifferences: collectionView.window != nil)
     }
 
     @objc private func refreshPulled() {
@@ -141,6 +253,9 @@ final class CatalogCell: UICollectionViewCell {
     private let statsLabel = UILabel()
     private let stickyTag = ChanTagLabel()
 
+    private var imageHeightConstraint: NSLayoutConstraint!
+    private var lastLayoutWidth: CGFloat = 0
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setUp()
@@ -159,13 +274,13 @@ final class CatalogCell: UICollectionViewCell {
         contentView.addSubview(card)
 
         thumbnail.cornerRadius = 0
+        thumbnail.scaling = .fill
         thumbnail.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(thumbnail)
 
-        subjectLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        subjectLabel.numberOfLines = 2
-
-        statsLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        subjectLabel.font = CatalogMetrics.subjectFont
+        subjectLabel.numberOfLines = CatalogMetrics.maximumSubjectLines
+        statsLabel.font = CatalogMetrics.statsFont
 
         stickyTag.text = "STICKY"
         stickyTag.isHidden = true
@@ -173,10 +288,13 @@ final class CatalogCell: UICollectionViewCell {
 
         let labels = UIStackView(arrangedSubviews: [subjectLabel, statsLabel])
         labels.axis = .vertical
-        labels.spacing = 2
+        labels.spacing = CatalogMetrics.subjectStatsSpacing
         labels.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(labels)
         card.addSubview(stickyTag)
+
+        imageHeightConstraint = thumbnail.heightAnchor.constraint(equalToConstant: CatalogMetrics.minimumImageHeight)
+        imageHeightConstraint.isActive = true
 
         NSLayoutConstraint.activate([
             card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -187,51 +305,75 @@ final class CatalogCell: UICollectionViewCell {
             thumbnail.leadingAnchor.constraint(equalTo: card.leadingAnchor),
             thumbnail.trailingAnchor.constraint(equalTo: card.trailingAnchor),
             thumbnail.topAnchor.constraint(equalTo: card.topAnchor),
-            thumbnail.heightAnchor.constraint(equalToConstant: 128),
 
-            labels.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 8),
-            labels.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
-            labels.topAnchor.constraint(equalTo: thumbnail.bottomAnchor, constant: 6),
-            labels.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -6),
+            labels.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: CatalogMetrics.textPadding),
+            labels.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -CatalogMetrics.textPadding),
+            labels.topAnchor.constraint(
+                equalTo: thumbnail.bottomAnchor,
+                constant: CatalogMetrics.imageLabelSpacing
+            ),
 
             stickyTag.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 6),
             stickyTag.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
         ])
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = contentView.bounds.width
+        guard width > 0, abs(width - lastLayoutWidth) > 0.5 else { return }
+        lastLayoutWidth = width
+        updateImageHeight(cardWidth: width)
+    }
+
     override func prepareForReuse() {
         super.prepareForReuse()
         thumbnail.reset()
+        currentPost = nil
+        lastLayoutWidth = 0
     }
 
+    private var currentPost: Post?
+    private var currentShowThumbnail = true
+
     func configure(post: Post, board: BoardID, theme: ChanTheme, showThumbnail: Bool) {
+        currentPost = post
+        currentShowThumbnail = showThumbnail
+
         card.backgroundColor = UIColor(theme.surface)
-        // Show the whole thumbnail, undistorted. The box is a fixed size, so a
-        // non-matching aspect ratio letterboxes against the card background
-        // instead of being cropped or stretched.
-        thumbnail.scaling = .fit
-        thumbnail.placeholderColor = UIColor(theme.elevated)
         subjectLabel.textColor = UIColor(theme.primaryText)
         statsLabel.textColor = UIColor(theme.secondaryText)
         stickyTag.backgroundColor = UIColor(theme.accent)
         stickyTag.isHidden = !(post.isSticky ?? false)
 
-        let subject = post.subject?.trimmingCharacters(in: .whitespacesAndNewlines)
-        subjectLabel.text = (subject?.isEmpty == false ? subject : nil) ?? "No subject"
+        subjectLabel.text = CatalogMetrics.displaySubject(for: post)
+        statsLabel.text = CatalogMetrics.stats(for: post)
 
-        let replies = post.replies ?? 0
-        let images = post.images ?? 0
-        statsLabel.text = "R: \(ChanFormat.count(replies))  I: \(ChanFormat.count(images))"
+        let width = contentView.bounds.width > 0 ? contentView.bounds.width : lastLayoutWidth
+        if width > 0 { updateImageHeight(cardWidth: width) }
 
-        if showThumbnail, let attachment = post.attachment {
-            let url = attachment.isSpoiler
-                ? ChanMediaURL.spoilerImage(board: board)
-                : ChanMediaURL.thumbnail(board: board, tim: attachment.tim)
-            thumbnail.load(url)
-            thumbnail.alpha = attachment.isSpoiler ? 0.55 : 1
-        } else {
+        guard showThumbnail, let attachment = post.attachment else {
             thumbnail.reset()
             thumbnail.alpha = 1
+            return
         }
+
+        let url = attachment.isSpoiler
+            ? ChanMediaURL.spoilerImage(board: board)
+            : ChanMediaURL.thumbnail(board: board, tim: attachment.tim)
+        thumbnail.load(url)
+        thumbnail.alpha = attachment.isSpoiler ? 0.55 : 1
+    }
+
+    /// The image takes every point the text does not need, so no card shows a gap.
+    private func updateImageHeight(cardWidth: CGFloat) {
+        guard let post = currentPost else { return }
+        let height = CatalogMetrics.imageHeight(
+            for: post,
+            cardWidth: cardWidth,
+            showThumbnails: currentShowThumbnail
+        )
+        guard abs(imageHeightConstraint.constant - height) > 0.5 else { return }
+        imageHeightConstraint.constant = height
     }
 }
