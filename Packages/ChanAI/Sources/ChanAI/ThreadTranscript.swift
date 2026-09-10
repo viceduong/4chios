@@ -70,13 +70,7 @@ public enum ThreadTranscript {
         }
 
         let omitted = posts.count - 1 - tail.count
-        let marker = omitted > 0 ? "
-
-[\(omitted) earlier posts omitted]
-
-" : "
-
-"
+        let marker = omitted > 0 ? "\n\n[\(omitted) earlier posts omitted]\n\n" : "\n\n"
         return render(first) + marker + render(tail)
     }
 
