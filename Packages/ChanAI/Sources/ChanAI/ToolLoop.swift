@@ -9,9 +9,6 @@ import Foundation
 /// keeps one model across summary, chat and search, instead of handing search
 /// turns to a second provider.
 struct ToolLoop {
-    /// The model may search more than once; this bounds the spend.
-    static let maximumRounds = 3
-
     struct ToolCall: Sendable, Equatable {
         let id: String
         let name: String

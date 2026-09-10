@@ -156,7 +156,8 @@ public struct AIChatClient: Sendable {
         _ messages: [AIChatMessage],
         provider: SearchProviding,
         maximumResults: Int,
-        maximumRounds: Int = ToolLoop.maximumRounds
+        /// Bounds the spend: the model may search more than once per turn.
+        maximumRounds: Int = 3
     ) async throws -> AIChatReply {
         guard configuration.isConfigured else { throw AIChatError.notConfigured }
 
