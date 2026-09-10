@@ -251,26 +251,32 @@ final class ThreadSummarizerTests: XCTestCase {
     }
 
     func testLongThreadIsMapReducedInOrder() async throws {
+        // Derive the expected chunk count from the same chunker the summarizer
+        // uses, so the test cannot drift out of sync with the character limit.
+        let posts = thread(30, commentLength: 300)
+        let limit = 400
+        let expectedChunks = ThreadTranscript.chunks(posts, characterLimit: limit).count
+        XCTAssertGreaterThan(expectedChunks, 1, "fixture must actually need a reduce pass")
+
+        let responses = (1...expectedChunks).map { completionResponse("part \($0) >>\($0)") }
+            + [completionResponse("merged >>2 and >>1")]
+
         let (summarizer, transport) = summarizer(
-            [
-                completionResponse("part one >>1"),
-                completionResponse("part two >>2"),
-                completionResponse("merged >>2 and >>1"),
-            ],
-            options: ThreadSummarizer.Options(includeImages: false, chunkCharacterLimit: 400)
+            responses,
+            options: ThreadSummarizer.Options(includeImages: false, chunkCharacterLimit: limit)
         )
 
-        let summary = try await summarizer.summarize(board: "g", op: 1, posts: thread(30, commentLength: 300))
+        let summary = try await summarizer.summarize(board: "g", op: 1, posts: posts)
 
-        XCTAssertEqual(transport.requests.count, 3, "two chunks plus the reduce pass")
-        XCTAssertEqual(summary.chunkCount, 2)
+        XCTAssertEqual(transport.requests.count, expectedChunks + 1, "one request per chunk plus the reduce pass")
+        XCTAssertEqual(summary.chunkCount, expectedChunks)
         XCTAssertEqual(summary.text, "merged >>2 and >>1")
 
         let lastBody = decodeBody(try XCTUnwrap(transport.requests.last))
         let messages = try XCTUnwrap(lastBody["messages"] as? [[String: Any]])
         let finalPrompt = try XCTUnwrap(messages.last?["content"] as? String)
         XCTAssertTrue(finalPrompt.contains("<part-1>"))
-        XCTAssertTrue(finalPrompt.contains("<part-2>"))
+        XCTAssertTrue(finalPrompt.contains("<part-\(expectedChunks)>"))
     }
 
     func testImagesAreCappedAndOnlySentWhenEnabled() async throws {

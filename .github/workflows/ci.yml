@@ -72,12 +72,20 @@ jobs:
         env:
           GC_KEY: ${{ secrets.GENERALCOMPUTE_API_KEY }}
         run: |
-          if [ -n "$GC_KEY" ]; then
-            /usr/libexec/PlistBuddy -c "Set :GeneralComputeAPIKey $GC_KEY" App/Info.plist
-            echo "Injected GENERALCOMPUTE_API_KEY into Info.plist"
-          else
+          if [ -z "$GC_KEY" ]; then
             echo "No GENERALCOMPUTE_API_KEY secret; the app will ask for one in Settings."
+            exit 0
           fi
+          python3 - <<'PYEOF'
+          import os, plistlib
+          path = "App/Info.plist"
+          with open(path, "rb") as handle:
+              info = plistlib.load(handle)
+          info["GeneralComputeAPIKey"] = os.environ["GC_KEY"]
+          with open(path, "wb") as handle:
+              plistlib.dump(info, handle)
+          print("Injected GeneralComputeAPIKey into", path)
+          PYEOF
 
       - name: Cache SwiftPM checkouts and binary artifacts
         uses: actions/cache@v4
