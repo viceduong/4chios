@@ -61,6 +61,10 @@ public final class CatalogStore: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var lastUpdated: Date?
+    @Published public private(set) var sort: CatalogSort = .bumpOrder
+
+    /// Filtered but unsorted, so changing the sort never refetches.
+    private var visible: [Post] = []
 
     private let environment: AppEnvironment
     private var hasLoaded = false
@@ -68,6 +72,14 @@ public final class CatalogStore: ObservableObject {
     public init(board: BoardID, environment: AppEnvironment) {
         self.board = board
         self.environment = environment
+        self.sort = environment.settings.catalogSort
+    }
+
+    /// Re-orders the catalog in place.
+    public func setSort(_ sort: CatalogSort) {
+        guard sort != self.sort else { return }
+        self.sort = sort
+        threads = sort.sorted(visible)
     }
 
     /// Compiled once per load rather than once per cell.
@@ -88,7 +100,7 @@ public final class CatalogStore: ObservableObject {
         refreshFilterEngine()
 
         if let cached = try? environment.database.catalog(board: board), !cached.isEmpty {
-            threads = applyFilters(cached)
+            publish(cached)
         }
 
         await refresh()
@@ -105,13 +117,18 @@ public final class CatalogStore: ObservableObject {
             try? environment.database.saveCatalog(board: board, posts: fetched)
             try? environment.database.pruneThreads(board: board, keeping: Set(fetched.map(\.no)))
             try? environment.database.markCatalogSynced(board: board)
-            threads = applyFilters(fetched)
+            publish(fetched)
             lastUpdated = Date()
         } catch let error as ChanError {
             if threads.isEmpty { errorMessage = error.errorDescription }
         } catch {
             if threads.isEmpty { errorMessage = error.localizedDescription }
         }
+    }
+
+    private func publish(_ posts: [Post]) {
+        visible = applyFilters(posts)
+        threads = sort.sorted(visible)
     }
 
     private func applyFilters(_ posts: [Post]) -> [Post] {

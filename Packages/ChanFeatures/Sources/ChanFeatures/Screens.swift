@@ -75,6 +75,22 @@ public struct CatalogScreen: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
+                    Menu {
+                        ForEach(CatalogSort.allCases) { sort in
+                            Button {
+                                settings.catalogSort = sort
+                                ChanHaptics.selection()
+                            } label: {
+                                if settings.catalogSort == sort {
+                                    Label(sort.label, systemImage: "checkmark")
+                                } else {
+                                    Label(sort.label, systemImage: sort.systemImage)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
                     Button {
                         settings.toggleFavorite(store.board)
                         ChanHaptics.tap()
@@ -89,6 +105,9 @@ public struct CatalogScreen: View {
                 }
                 .tint(theme.accent)
             }
+        }
+        .onChange(of: settings.catalogSort) { sort in
+            store.setSort(sort)
         }
         .sheet(isPresented: $showComposer) {
             ComposerScreen(board: store.board, thread: nil)
