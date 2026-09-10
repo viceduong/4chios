@@ -364,4 +364,26 @@ final class AlwaysOfferedSearchTests: XCTestCase {
     func testTurboIsTheDefaultEngineBecauseItIsSevenTimesCheaper() {
         XCTAssertEqual(AIConfiguration.SearchConfiguration(apiKey: "k").engine, .parallelTurbo)
     }
+
+    func testLookupPhrasingStillInsistsEvenWithoutTheToggle() async throws {
+        // The globe is hidden when search is always offered, so the phrasing has
+        // to carry the intent instead.
+        let (chat, transport) = session([answer("Checked.")], mode: .serverTool)
+        _ = try await chat.ask("What is the latest Proxmox release?", history: [])
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        let messages = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+        let prompt = try XCTUnwrap(messages.last?["content"] as? String)
+        XCTAssertTrue(prompt.contains("Use web search"))
+    }
+
+    func testAnOrdinaryQuestionDoesNotInsist() async throws {
+        let (chat, transport) = session([answer("The OP said X.")], mode: .serverTool)
+        _ = try await chat.ask("What did the OP mean by that?", history: [])
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        let messages = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+        let prompt = try XCTUnwrap(messages.last?["content"] as? String)
+        XCTAssertFalse(prompt.contains("Use web search"), "the model should decide on its own")
+    }
 }
