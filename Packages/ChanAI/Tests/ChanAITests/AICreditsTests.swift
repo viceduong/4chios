@@ -1,5 +1,6 @@
 import ChanAPI
 import ChanAI
+import ChanCore
 import Foundation
 import XCTest
 @testable import ChanAI
