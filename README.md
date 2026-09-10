@@ -72,6 +72,15 @@ Two lanes, both in [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 The unsigned `.ipa` installs directly with [TrollStore](https://github.com/opa334/TrollStore)
 on iOS 14.0–16.6.1, which covers the 15.6.1 target. No Apple Developer account needed.
 
+## AI providers
+
+Summaries and chat run on General Compute (`gemma-4-31B-it`); turns that need
+live web results route through OpenRouter's search plugin. What each provider
+actually supports — and the probes that established it — is documented in
+[`docs/AI-PROVIDERS.md`](docs/AI-PROVIDERS.md). Short version: General Compute
+has no server-side search and no billing endpoint, but its function calling does
+work.
+
 ## Legal
 
 - Not affiliated with 4chan. Data is provided by 4chan via its public read API.
