@@ -150,9 +150,7 @@ public struct ThreadChatSession: Sendable {
         }
 
         let prompt = insistingOnSearch
-            ? "\(question)
-
-(Use web search to check this before answering.)"
+            ? "\(question)\n\n(Use web search to check this before answering.)"
             : question
         messages.append(AIChatMessage(role: .user, text: prompt))
         return messages
