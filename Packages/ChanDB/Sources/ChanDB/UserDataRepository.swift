@@ -151,8 +151,65 @@ public extension ChanDatabase {
         }
     }
 
-    // MARK: - Filters
+    // MARK: - Posts written by the user
 
+    /// Records a successfully submitted post so replies to it can be marked `(You)`.
+    func recordMyPost(board: BoardID, number: PostNumber, thread: PostNumber, at date: Date = Date()) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO my_post (board_id, no, thread_no, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(board_id, no) DO NOTHING
+                """,
+                arguments: [board.rawValue, number.value, thread.value, date.timeIntervalSince1970]
+            )
+        }
+    }
+
+    /// Lets the user tag an existing post as theirs (4chan-X's "mark as yours").
+    func markAsMine(board: BoardID, number: PostNumber, thread: PostNumber, at date: Date = Date()) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO my_post (board_id, no, thread_no, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(board_id, no) DO UPDATE SET thread_no = excluded.thread_no
+                """,
+                arguments: [board.rawValue, number.value, thread.value, date.timeIntervalSince1970]
+            )
+        }
+    }
+
+    func removeMyPost(board: BoardID, number: PostNumber) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: "DELETE FROM my_post WHERE board_id = ? AND no = ?",
+                arguments: [board.rawValue, number.value]
+            )
+        }
+    }
+
+    func myPostNumbers(board: BoardID) throws -> Set<PostNumber> {
+        try writer.read { db -> Set<PostNumber> in
+            let numbers = try Int64.fetchAll(
+                db,
+                sql: "SELECT no FROM my_post WHERE board_id = ?",
+                arguments: [board.rawValue]
+            )
+            return Set(numbers.map { PostNumber(Int($0)) })
+        }
+    }
+
+    func isMyPost(board: BoardID, number: PostNumber) throws -> Bool {
+        try writer.read { db in
+            try Bool.fetchOne(
+                db,
+                sql: "SELECT EXISTS(SELECT 1 FROM my_post WHERE board_id = ? AND no = ?)",
+                arguments: [board.rawValue, number.value]
+            ) ?? false
+        }
+    }
+
+    // MARK: - Filters
     @discardableResult
     func saveFilter(_ filter: ChanFilter) throws -> ChanFilter {
         try writer.write { db in

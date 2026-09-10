@@ -184,4 +184,28 @@ final class ChanDatabaseTests: XCTestCase {
     func testSchemaVersionTracksCore() {
         XCTAssertEqual(ChanDatabase.schemaVersion, ChanVersion.schemaVersion)
     }
+
+    func testMyPostsAreTracked() throws {
+        XCTAssertFalse(try database.isMyPost(board: "g", number: 42))
+        XCTAssertTrue(try database.myPostNumbers(board: "g").isEmpty)
+
+        try database.recordMyPost(board: "g", number: 42, thread: 1)
+        try database.recordMyPost(board: "g", number: 43, thread: 7)
+        // Re-recording is idempotent.
+        try database.recordMyPost(board: "g", number: 42, thread: 1)
+
+        XCTAssertTrue(try database.isMyPost(board: "g", number: 42))
+        XCTAssertEqual(try database.myPostNumbers(board: "g"), [PostNumber(42), PostNumber(43)])
+        XCTAssertTrue(try database.myPostNumbers(board: "v").isEmpty)
+
+        try database.removeMyPost(board: "g", number: 42)
+        XCTAssertEqual(try database.myPostNumbers(board: "g"), [PostNumber(43)])
+    }
+
+    func testMarkAsMineUpdatesThread() throws {
+        try database.markAsMine(board: "g", number: 5, thread: 2)
+        XCTAssertTrue(try database.isMyPost(board: "g", number: 5))
+        try database.markAsMine(board: "g", number: 5, thread: 3)
+        XCTAssertEqual(try database.myPostNumbers(board: "g"), [PostNumber(5)])
+    }
 }

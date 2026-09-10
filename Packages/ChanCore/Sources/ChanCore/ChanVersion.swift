@@ -5,5 +5,5 @@ public enum ChanVersion {
     /// Marketing version, kept in sync with `project.yml`.
     public static let current = "0.1.0"
     /// Local database schema version. Bump with every migration.
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
 }

@@ -160,9 +160,21 @@ public final class ChanDatabase: @unchecked Sendable {
                 )
                 """)
         }
+
+        // v2: posts the user wrote, so quotes aimed at them can be marked "(You)".
+        migrator.registerMigration("v2") { db in
+            try db.create(table: "my_post") { table in
+                table.column("board_id", .text).notNull()
+                table.column("no", .integer).notNull()
+                table.column("thread_no", .integer).notNull()
+                table.column("created_at", .double).notNull()
+                table.primaryKey(["board_id", "no"])
+            }
+            try db.create(index: "my_post_thread", on: "my_post", columns: ["board_id", "thread_no"])
+        }
+
         return migrator
     }
-
     // MARK: - JSON codec
 
     static let encoder = JSONEncoder()
