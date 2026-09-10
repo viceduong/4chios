@@ -47,13 +47,20 @@ public enum SearchIntent {
         "what happened", "who won", "is it true that", "fact check", "fact-check",
     ]
 
-    /// Phrases a model uses when it is out of date and would need the web.
+    /// Phrases that mean "the answer is not here". Either the model is out of
+    /// date, or the thread simply does not say — both are worth one automatic
+    /// web search, which is what the reader was really asking for.
     private static let escalationMarkers = [
+        // Out of date.
         "as of my knowledge", "knowledge cutoff", "my training data",
         "i don't have access to real-time", "i do not have access to real-time",
         "cannot browse", "can't browse", "unable to browse",
         "i don't have up-to-date", "i do not have up-to-date",
         "no access to current", "no real-time",
+        // The thread does not answer it.
+        "does not contain", "doesn't contain", "does not say", "doesn't say",
+        "not mentioned in the thread", "not in the thread, "no information about",
+        "cannot be determined from the thread", "isn't mentioned",
     ]
 
     public static func requiresWeb(_ question: String) -> Bool {

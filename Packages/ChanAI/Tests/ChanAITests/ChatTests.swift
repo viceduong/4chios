@@ -125,6 +125,9 @@ final class SearchIntentTests: XCTestCase {
         XCTAssertTrue(SearchIntent.needsEscalation("I don't have access to real-time data."))
         XCTAssertTrue(SearchIntent.needsEscalation("I cannot browse the web."))
         XCTAssertFalse(SearchIntent.needsEscalation("The thread says the rack is quiet now."))
+        // The answer simply not being in the thread is its own trigger.
+        XCTAssertTrue(SearchIntent.needsEscalation("The provided thread does not contain that information."))
+        XCTAssertTrue(SearchIntent.needsEscalation("That isn't mentioned anywhere in the posts."))
     }
 }
 
