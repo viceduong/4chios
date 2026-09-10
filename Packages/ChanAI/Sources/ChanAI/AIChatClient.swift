@@ -153,17 +153,27 @@ public struct AIChatClient: Sendable {
         temperature: Double,
         search: AIConfiguration.SearchConfiguration?
     ) throws -> Data {
+        // Exactly one of these is populated: the plugin always searches, the
+        // server tool lets the model decide.
+        let plugins: [SearchPlugin]? = search?.mode == .plugin
+            ? search.map { [SearchPlugin(engine: $0.engine, maxResults: $0.maximumResults)] }
+            : nil
+        let tools: [ServerTool]? = search?.mode == .serverTool
+            ? search.map {
+                [ServerTool(engine: $0.engine,
+                            maxResults: $0.maximumResults,
+                            maxTotalResults: $0.maximumTotalResults)]
+            }
+            : nil
+
         let payload = ChatCompletionRequest(
             model: model,
             messages: messages.map { RequestMessage(role: $0.role.rawValue, content: $0.text) },
             maxTokens: maximumTokens,
             temperature: temperature,
             stream: false,
-            plugins: search.filter { $0.mode == .plugin }
-                .map { [SearchPlugin(engine: $0.engine, maxResults: $0.maximumResults)] },
-            tools: search.filter { $0.mode == .serverTool }
-                .map { [ServerTool(engine: $0.engine, maxResults: $0.maximumResults,
-                                   maxTotalResults: $0.maximumTotalResults)] }
+            plugins: plugins,
+            tools: tools
         )
         return try JSONEncoder().encode(payload)
     }
