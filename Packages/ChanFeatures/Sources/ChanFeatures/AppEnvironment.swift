@@ -22,7 +22,7 @@ public final class AppEnvironment: ObservableObject {
         poster: ChanPoster,
         database: ChanDatabase,
         settings: ChanSettings,
-        usage: AIUsageStore = AIUsageStore()
+        usage: AIUsageStore
     ) {
         self.rateLimiter = rateLimiter
         self.client = client
@@ -50,7 +50,8 @@ public final class AppEnvironment: ObservableObject {
             client: ChanClient(rateLimiter: rateLimiter),
             poster: ChanPoster(rateLimiter: rateLimiter),
             database: database,
-            settings: ChanSettings()
+            settings: ChanSettings(),
+            usage: AIUsageStore()
         )
     }
 }
