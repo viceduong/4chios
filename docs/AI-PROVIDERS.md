@@ -161,6 +161,53 @@ so source parsing is shared. Server tools are in **beta**.
 Because the model decides, `usedWebSearch` on the reply is derived from whether
 citations came back, not from whether search was requested.
 
+## Recommended configuration (set and forget)
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Search mode | **Server tool** | Costs nothing on turns that do not search. No toggle to remember. |
+| Engine | **Parallel Turbo** | $0.001 per search vs $0.007 for Exa. Measured to be at least as good. |
+| `max_results` | 10 | Up to ten are included in the per-request fee. |
+| `max_total_results` | 20 | Caps a model that keeps searching. |
+| Summary/chat model | Gemma 4 31B-IT on General Compute | Keeps everything except search on one provider. |
+
+**Effective cost: $0.001 per search that actually happens, $0 for every turn that
+does not.** The server tool is always offered because offering it is free, so
+there is nothing to toggle — if the model judges it needs the web, it searches,
+and if it does not, nothing is billed.
+
+### Why Turbo over Exa
+
+Same question, both engines, same model:
+
+| Engine | Search cost | Answer |
+| --- | --- | --- |
+| Exa auto | $0.007 | Proxmox 9.2, 21 May 2026, dynamic load balancer, WireGuard SDN, BGP/EVPN filtering |
+| **Parallel Turbo** | **$0.001** | The same, plus Debian 13.5 Trixie, kernel 7.0, HA arm/disarm, Ceph Tentacle 20.2 |
+
+Both returned 10 sources from the same primary pages. Turbo was seven times
+cheaper and more detailed. Its documented limitation is English and Japanese
+only, which covers imageboard traffic.
+
+### Free alternatives, if you want $0 rather than $0.001
+
+OpenRouter resells Exa at Exa's own list price ($7 per 1,000 requests, no
+markup), so there is nothing to arbitrage by going direct — except the free
+allowances:
+
+| Provider | Free allowance | Card required | Notes |
+| --- | --- | --- | --- |
+| Exa direct | $20 on signup, then **$10/month** (~1,400 searches) | — | Same engine and price OpenRouter resells |
+| Tavily | **1,000 searches/month** | No | 1 credit per basic search, 2 per advanced |
+| Brave | $5/month (~1,000 searches) | **Yes** | Card-free tier was retired in Feb 2026 |
+| Serper | 2,500 one-off credits, 6-month expiry | No | Google results |
+
+Using any of these means running the search as a **client-side tool call**:
+Gemma asks for `web_search`, the app executes it, Gemma synthesises. That loop
+is verified working (see above). It keeps one model in the conversation instead
+of switching to a second provider for search turns, at the cost of a second
+round trip.
+
 ## What the app does
 
 | Need | Where it goes |

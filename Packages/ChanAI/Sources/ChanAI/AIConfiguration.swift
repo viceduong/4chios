@@ -26,7 +26,7 @@ public struct AIConfiguration: Sendable, Equatable {
             model: String = AIConfiguration.openRouterSearchModel,
             maximumResults: Int = 10,
             maximumTotalResults: Int = 20,
-            engine: AISearchEngine = .exaAuto,
+            engine: AISearchEngine = .parallelTurbo,
             mode: AISearchMode = .serverTool
         ) {
             self.baseURL = baseURL

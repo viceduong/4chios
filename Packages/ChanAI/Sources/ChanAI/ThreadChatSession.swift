@@ -97,15 +97,24 @@ public struct ThreadChatSession: Sendable {
             throw AIChatError.decoding("Ask a question first.")
         }
 
-        let wantsSearch = client.canSearch && (useWebSearch || SearchIntent.requiresWeb(trimmed))
-        let messages = self.messages(for: trimmed, history: history)
+        // In server-tool mode the tool is free when unused, so it is always
+        // offered and the model decides for itself: no toggle to remember, and
+        // no charge on turns that do not need the web.
+        let alwaysOffered = client.canSearch && client.configuration.search?.mode == .serverTool
+        let wantsSearch = alwaysOffered || (client.canSearch && (useWebSearch || SearchIntent.requiresWeb(trimmed)))
+
+        // A server tool cannot be forced from the request, so an explicit
+        // request becomes an instruction instead.
+        let insist = alwaysOffered && useWebSearch
+        let messages = self.messages(for: trimmed, history: history, insistingOnSearch: insist)
 
         var reply = try await client.complete(messages, searching: wantsSearch)
         var usedSearch = reply.usedWebSearch
 
-        // The model may only reveal that it needs live data once it tries to
-        // answer. Give it one automatic retry with search before giving up.
-        if !usedSearch, client.canSearch, SearchIntent.needsEscalation(reply.text) {
+        // When the tool was always available the model already had its chance,
+        // so a retry would only spend money. Otherwise give it one more go with
+        // search before accepting that it cannot answer.
+        if !usedSearch, client.canSearch, !alwaysOffered, SearchIntent.needsEscalation(reply.text) {
             reply = try await client.complete(messages, searching: true)
             usedSearch = reply.usedWebSearch
         }
@@ -122,7 +131,11 @@ public struct ThreadChatSession: Sendable {
 
     // MARK: - Prompt assembly
 
-    private func messages(for question: String, history: [ChatTurn]) -> [AIChatMessage] {
+    private func messages(
+        for question: String,
+        history: [ChatTurn],
+        insistingOnSearch: Bool = false
+    ) -> [AIChatMessage] {
         var messages: [AIChatMessage] = [AIChatMessage(role: .system, text: Self.systemPrompt(context: context))]
 
         // Keep the tail of the conversation; older turns add little and cost
@@ -136,7 +149,12 @@ public struct ThreadChatSession: Sendable {
             )
         }
 
-        messages.append(AIChatMessage(role: .user, text: question))
+        let prompt = insistingOnSearch
+            ? "\(question)
+
+(Use web search to check this before answering.)"
+            : question
+        messages.append(AIChatMessage(role: .user, text: prompt))
         return messages
     }
 

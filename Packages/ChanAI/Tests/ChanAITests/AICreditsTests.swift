@@ -248,3 +248,119 @@ final class AISearchModeTests: XCTestCase {
                        "a turn without search goes to the primary endpoint")
     }
 }
+
+
+final class AlwaysOfferedSearchTests: XCTestCase {
+    private func session(
+        _ responses: [ChanHTTPResponse],
+        mode: AISearchMode
+    ) -> (ThreadChatSession, MockAITransport) {
+        let transport = MockAITransport(responses: responses)
+        let configuration = AIConfiguration(
+            apiKey: "gc_primary",
+            search: AIConfiguration.SearchConfiguration(apiKey: "or_search", mode: mode)
+        )
+        let client = AIChatClient(transport: transport, configuration: configuration)
+        return (
+            ThreadChatSession(
+                client: client,
+                posts: [Post(no: 1, time: Date(), commentHTML: "thread body")],
+                summary: nil
+            ),
+            transport
+        )
+    }
+
+    private func answer(_ text: String) -> ChanHTTPResponse {
+        let payload: [String: Any] = ["model": "m", "choices": [["message": ["content": text]]]]
+        return ChanHTTPResponse(
+            statusCode: 200,
+            body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+        )
+    }
+
+    private func answerWithSource(_ text: String, url: String) -> ChanHTTPResponse {
+        let message: [String: Any] = [
+            "content": text,
+            "annotations": [["type": "url_citation", "url_citation": ["url": url, "title": "Source"]]],
+        ]
+        let payload: [String: Any] = ["model": "m", "choices": [["message": message]]]
+        return ChanHTTPResponse(
+            statusCode: 200,
+            body: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+        )
+    }
+
+    private func decoded(_ request: ChanHTTPRequest) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]) ?? [:]
+    }
+
+    func testServerToolIsOfferedEvenWithoutTogglingSearchOn() async throws {
+        let (chat, transport) = session([answer("The thread says so.")], mode: .serverTool)
+        _ = try await chat.ask("What did the OP mean?", history: [])
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        XCTAssertNotNil(payload["tools"], "the costless-when-unused tool should always be available")
+        XCTAssertNil(payload["plugins"])
+    }
+
+    func testPluginModeStillRequiresAnExplicitRequest() async throws {
+        let (chat, transport) = session([answer("The thread says so.")], mode: .plugin)
+        _ = try await chat.ask("What did the OP mean?", history: [])
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        XCTAssertNil(payload["plugins"], "the plugin is not attached for an ordinary question")
+        XCTAssertNil(payload["tools"])
+    }
+
+    func testPluginModeAttachesThePluginWhenAsked() async throws {
+        let (chat, transport) = session([answer("Looked it up.")], mode: .plugin)
+        _ = try await chat.ask("What did the OP mean?", history: [], useWebSearch: true)
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        XCTAssertNotNil(payload["plugins"])
+    }
+
+    func testInsistingTurnsIntoAnInstructionInServerToolMode() async throws {
+        let (chat, transport) = session([answer("Checked.")], mode: .serverTool)
+        _ = try await chat.ask("Is that claim true?", history: [], useWebSearch: true)
+
+        let payload = decoded(try XCTUnwrap(transport.requests.first))
+        let messages = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+        let prompt = try XCTUnwrap(messages.last?["content"] as? String)
+        XCTAssertTrue(
+            prompt.contains("Use web search"),
+            "a server tool cannot be forced from the request, so it is asked for in the prompt"
+        )
+    }
+
+    func testNoEscalationRetryWhenSearchWasAlwaysAvailable() async throws {
+        // The model already had the tool and chose not to use it; retrying would
+        // only spend money to hear the same answer.
+        let (chat, transport) = session(
+            [answer("The provided thread does not contain that information.")],
+            mode: .serverTool
+        )
+        _ = try await chat.ask("What is the price?", history: [])
+
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    func testEscalationStillHappensInPluginModeWhenSearchWasNotEnabled() async throws {
+        let (chat, transport) = session(
+            [
+                answer("As of my knowledge cutoff I cannot confirm that."),
+                answerWithSource("It shipped last week.", url: "https://news.example"),
+            ],
+            mode: .plugin
+        )
+        let turn = try await chat.ask("Did it ship?", history: [])
+
+        XCTAssertEqual(transport.requests.count, 2, "the plugin path still escalates")
+        XCTAssertTrue(turn.usedWebSearch)
+    }
+
+    func testTurboIsTheDefaultEngineBecauseItIsSevenTimesCheaper() {
+        XCTAssertEqual(AIConfiguration.SearchConfiguration(apiKey: "k").engine, .parallelTurbo)
+    }
+}
