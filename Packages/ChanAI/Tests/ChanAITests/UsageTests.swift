@@ -118,7 +118,7 @@ final class AIUsageReportingTests: XCTestCase {
         ])
         let configuration = AIConfiguration(
             apiKey: "gc_primary",
-            search: AIConfiguration.SearchConfiguration(apiKey: "or_search")
+            search: AIConfiguration.SearchConfiguration(apiKey: "or_search", mode: .plugin)
         )
         let client = AIChatClient(transport: transport, configuration: configuration)
         let session = ThreadChatSession(

@@ -125,7 +125,9 @@ final class AISearchEngineTests: XCTestCase {
         let transport = MockAITransport(responses: [ChanHTTPResponse(statusCode: 200, body: body)])
         let configuration = AIConfiguration(
             apiKey: "gc",
-            search: AIConfiguration.SearchConfiguration(apiKey: "or", maximumResults: 10, engine: .parallelTurbo)
+            search: AIConfiguration.SearchConfiguration(
+                apiKey: "or", maximumResults: 10, engine: .parallelTurbo, mode: .plugin
+            )
         )
         let client = AIChatClient(transport: transport, configuration: configuration)
         _ = try await client.complete([AIChatMessage(role: .user, text: "q")], searching: true)

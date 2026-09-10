@@ -45,7 +45,7 @@ final class AIChatSearchTests: XCTestCase {
         let transport = MockAITransport(responses: responses)
         let configuration = AIConfiguration(
             apiKey: "gc_primary",
-            search: AIConfiguration.SearchConfiguration(apiKey: "or_search", maximumResults: 3)
+            search: AIConfiguration.SearchConfiguration(apiKey: "or_search", maximumResults: 3, mode: .plugin)
         )
         return (AIChatClient(transport: transport, configuration: configuration), transport)
     }
