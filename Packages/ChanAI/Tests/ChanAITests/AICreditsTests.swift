@@ -110,7 +110,7 @@ final class AISearchEngineTests: XCTestCase {
     func testTenResultsIsTheDefaultBecauseTheFeeIsFlat() {
         let configuration = AIConfiguration.SearchConfiguration(apiKey: "k")
         XCTAssertEqual(configuration.maximumResults, 10, "up to ten results cost the same as two")
-        XCTAssertEqual(configuration.engine, .exaAuto)
+        XCTAssertEqual(configuration.engine, .parallelTurbo, "seven times cheaper, measured at least as good")
     }
 
     func testCostLabelsMatchOpenRoutersPublishedRates() {

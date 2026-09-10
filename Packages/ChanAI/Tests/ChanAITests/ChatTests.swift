@@ -146,7 +146,9 @@ final class ThreadChatSessionTests: XCTestCase {
         let transport = MockAITransport(responses: responses)
         let configuration = AIConfiguration(
             apiKey: "gc_primary",
-            search: searchKey.map { AIConfiguration.SearchConfiguration(apiKey: $0) }
+            // Plugin mode: these tests cover the escalation retry, which only
+            // applies when search was not already available.
+            search: searchKey.map { AIConfiguration.SearchConfiguration(apiKey: $0, mode: .plugin) }
         )
         let client = AIChatClient(transport: transport, configuration: configuration)
         return (ThreadChatSession(client: client, posts: posts, summary: nil), transport)
