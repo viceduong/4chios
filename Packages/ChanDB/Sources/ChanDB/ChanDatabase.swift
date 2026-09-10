@@ -182,6 +182,20 @@ public final class ChanDatabase: @unchecked Sendable {
             }
         }
 
+        // v4: cached AI summaries, keyed by thread and model so switching models
+        // does not invalidate the other's summary.
+        migrator.registerMigration("v4") { db in
+            try db.create(table: "thread_summary") { table in
+                table.column("board_id", .text).notNull()
+                table.column("op_no", .integer).notNull()
+                table.column("model", .text).notNull()
+                table.column("created_at", .double).notNull()
+                table.column("post_count", .integer).notNull()
+                table.column("json", .text).notNull()
+                table.primaryKey(["board_id", "op_no", "model"])
+            }
+        }
+
         return migrator
     }
     // MARK: - JSON codec

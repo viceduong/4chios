@@ -54,6 +54,36 @@ public struct SettingsScreen: View {
                     }
                 }
 
+                Section("AI summaries") {
+                    TextField("Endpoint", text: $settings.aiEndpoint)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .font(.system(.footnote, design: .monospaced))
+                    TextField("Model", text: $settings.aiModel)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .font(.system(.footnote, design: .monospaced))
+                    SecureField("API key", text: $settings.aiAPIKey)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+
+                    Toggle("Send thread images", isOn: $settings.aiSendsImages)
+
+                    if settings.isAIConfigured {
+                        Label("Ready", systemImage: "checkmark.seal.fill")
+                            .font(.caption)
+                            .foregroundColor(theme.accent)
+                    } else {
+                        Label("Add a key to enable summaries", systemImage: "key")
+                            .font(.caption)
+                            .foregroundColor(theme.danger)
+                    }
+
+                    Text("Summaries send this thread's post text, plus up to 6 non-spoiler images when enabled, to the endpoint above. The key is kept in the Keychain, never in preferences.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+                }
+
                 Section("Filters") {
                     NavigationLink(destination: FiltersScreen()) {
                         Label("Content filters", systemImage: "line.3.horizontal.decrease.circle")

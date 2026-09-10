@@ -16,14 +16,27 @@ public struct PostBodyRenderer {
     public let fontSize: CGFloat
     /// Run indices whose spoilers the user has revealed.
     public let revealedSpoilers: Set<Int>
+    /// `>>N` links that deserve a suffix, e.g. `(OP)` or `(You)`.
+    public let quoteAnnotations: [PostNumber: String]
+    /// The quote link to emphasise — set when the user jumped here from that post.
+    public let highlightedQuote: PostNumber?
 
-    public init(theme: ChanTheme, fontSize: CGFloat, revealedSpoilers: Set<Int> = []) {
+    public init(
+        theme: ChanTheme,
+        fontSize: CGFloat,
+        revealedSpoilers: Set<Int> = [],
+        quoteAnnotations: [PostNumber: String] = [:],
+        highlightedQuote: PostNumber? = nil
+    ) {
         self.theme = theme
         self.fontSize = fontSize
         self.revealedSpoilers = revealedSpoilers
+        self.quoteAnnotations = quoteAnnotations
+        self.highlightedQuote = highlightedQuote
     }
 
     public var baseFont: UIFont { .systemFont(ofSize: fontSize) }
+    public var annotationFont: UIFont { .systemFont(ofSize: max(fontSize - 3, 9), weight: .semibold) }
     public var monospacedFont: UIFont { .monospacedSystemFont(ofSize: max(fontSize - 1, 10), weight: .regular) }
 
     public func attributedString(for body: PostBody) -> NSAttributedString {
@@ -56,6 +69,13 @@ public struct PostBodyRenderer {
                 }
             }
 
+            if case let .quote(number)? = run.link, number == highlightedQuote {
+                // The reader came here from this post's reply: mark the link that
+                // points back, which is otherwise impossible to spot in a post
+                // quoting twenty people.
+                attributes[.backgroundColor] = UIColor(theme.accent).withAlphaComponent(0.30)
+            }
+
             if run.style.contains(.spoiler) {
                 if revealedSpoilers.contains(index) {
                     attributes[.backgroundColor] = UIColor(theme.elevated)
@@ -67,6 +87,18 @@ public struct PostBodyRenderer {
             }
 
             output.append(NSAttributedString(string: run.text, attributes: attributes))
+
+            if case let .quote(number)? = run.link, let annotation = quoteAnnotations[number] {
+                output.append(
+                    NSAttributedString(
+                        string: " (\(annotation))",
+                        attributes: [
+                            .font: annotationFont,
+                            .foregroundColor: UIColor(theme.accent),
+                        ]
+                    )
+                )
+            }
         }
 
         return output

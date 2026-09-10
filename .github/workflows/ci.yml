@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ChanCore, ChanAPI]
+        package: [ChanCore, ChanAPI, ChanAI]
     steps:
       - uses: actions/checkout@v5
 
@@ -64,6 +64,20 @@ jobs:
 
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
+
+      # Summaries work out of the box only if the repository defines
+      # GENERALCOMPUTE_API_KEY. Without it the app asks for a key in Settings,
+      # which keeps credentials out of the repository entirely.
+      - name: Inject AI key (optional)
+        env:
+          GC_KEY: ${{ secrets.GENERALCOMPUTE_API_KEY }}
+        run: |
+          if [ -n "$GC_KEY" ]; then
+            /usr/libexec/PlistBuddy -c "Set :GeneralComputeAPIKey $GC_KEY" App/Info.plist
+            echo "Injected GENERALCOMPUTE_API_KEY into Info.plist"
+          else
+            echo "No GENERALCOMPUTE_API_KEY secret; the app will ask for one in Settings."
+          fi
 
       - name: Cache SwiftPM checkouts and binary artifacts
         uses: actions/cache@v4

@@ -6,7 +6,8 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// The thread timeline: one self-sizing cell per post, with quote navigation.
+/// The thread timeline: self-sizing post cells with quote backlinks, filter
+/// stubs, quote navigation, and long-press previews.
 public final class ThreadViewController: UIViewController {
     private enum Section { case main }
 
@@ -20,6 +21,14 @@ public final class ThreadViewController: UIViewController {
     private var theme: ChanTheme
     private var fontSize: CGFloat
     private var cancellables = Set<AnyCancellable>()
+
+    /// Stubs the user has expanded.
+    private var revealedStubs: Set<PostNumber> = []
+    /// Destination post → the post the reader came from, so the single relevant
+    /// `>>` link can be highlighted.
+    private var highlightTargets: [PostNumber: PostNumber] = [:]
+
+    private let peek = QuotePeekView()
 
     public init(
         store: ThreadStore,
@@ -43,6 +52,7 @@ public final class ThreadViewController: UIViewController {
         view.backgroundColor = UIColor(theme.background)
         configureCollectionView()
         configureDataSource()
+        configurePeek()
 
         store.$posts
             .receive(on: RunLoop.main)
@@ -57,14 +67,17 @@ public final class ThreadViewController: UIViewController {
         collectionView.reloadData()
     }
 
+    // MARK: - Setup
+
     private func configureCollectionView() {
         var configuration = UICollectionLayoutListConfiguration(appearance: .plain)
         configuration.showsSeparators = false
         configuration.backgroundColor = .clear
 
-        let layout = UICollectionViewCompositionalLayout.list(using: configuration)
-
-        collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView = UICollectionView(
+            frame: .zero,
+            collectionViewLayout: UICollectionViewCompositionalLayout.list(using: configuration)
+        )
         collectionView.backgroundColor = .clear
         collectionView.alwaysBounceVertical = true
         collectionView.keyboardDismissMode = .interactive
@@ -95,40 +108,133 @@ public final class ThreadViewController: UIViewController {
                 return cell
             }
 
+            let decision = self.store.filterDecision(for: post)
+            let isStub = decision.contains(.stub) && !self.revealedStubs.contains(number)
+
             postCell.configure(
                 post: post,
                 board: self.store.board,
                 theme: self.theme,
-                fontSize: self.fontSize
+                fontSize: self.fontSize,
+                isStub: isStub,
+                stubReason: isStub ? self.stubReason(for: post) : nil,
+                backlinks: self.store.graph.replies(to: number),
+                annotations: self.store.quoteAnnotations(for: post),
+                isMine: self.store.myPosts.contains(number),
+                quotesYou: self.store.quotesUser(post),
+                isHighlighted: decision.contains(.highlight),
+                highlightedQuote: self.highlightTargets[number]
             )
-            postCell.onQuoteTap = { [weak self] quoted in self?.scrollTo(quoted) }
-            postCell.onLinkTap = { url in UIApplication.shared.open(url) }
+
+            postCell.onQuoteTap = { [weak self] quoted in self?.navigate(to: quoted, from: number) }
+            postCell.onQuoteLongPress = { [weak self] quoted in self?.showPeek(for: quoted, from: number) }
+            postCell.onBacklinkTap = { [weak self] backlink in self?.navigate(to: backlink, from: number) }
+            postCell.onBacklinkLongPress = { [weak self] backlink in self?.showPeek(for: backlink, from: number) }
+            postCell.onStubTap = { [weak self] in self?.revealStub(number) }
             postCell.onMediaTap = { [weak self] in
                 guard let self, let current = self.postsByNumber[number] else { return }
                 self.onOpenMedia(current)
             }
+            postCell.onMarkAsMine = { [weak self] in
+                self?.store.markAsMine(number)
+                ChanHaptics.success()
+                self?.reconfigure(number)
+            }
+
             return postCell
         }
     }
 
+    private func configurePeek() {
+        peek.translatesAutoresizingMaskIntoConstraints = false
+        peek.isHidden = true
+        view.addSubview(peek)
+        NSLayoutConstraint.activate([
+            peek.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            peek.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            peek.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+        ])
+    }
+
+    // MARK: - Diffing
+
     private func apply(_ posts: [Post]) {
-        postsByNumber = Dictionary(uniqueKeysWithValues: posts.map { ($0.no, $0) })
+        // Hidden posts never reach the list at all.
+        let visible = posts.filter { !store.filterDecision(for: $0).contains(.hide) }
+        postsByNumber = Dictionary(uniqueKeysWithValues: visible.map { ($0.no, $0) })
 
         var snapshot = NSDiffableDataSourceSnapshot<Section, PostNumber>()
         snapshot.appendSections([.main])
-        snapshot.appendItems(posts.map(\.no), toSection: .main)
-
-        let shouldAnimate = !posts.isEmpty && collectionView.window != nil
-        dataSource.apply(snapshot, animatingDifferences: shouldAnimate)
+        snapshot.appendItems(visible.map(\.no), toSection: .main)
+        dataSource.apply(snapshot, animatingDifferences: collectionView.window != nil)
     }
 
-    private func scrollTo(_ number: PostNumber) {
+    private func reconfigure(_ number: PostNumber) {
+        var snapshot = dataSource.snapshot()
+        guard snapshot.itemIdentifiers.contains(number) else { return }
+        snapshot.reconfigureItems([number])
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    // MARK: - Interaction
+
+    private func stubReason(for post: Post) -> String {
+        let hit = store.filterMatches(for: post).first
+        guard let hit else { return "Filtered" }
+        return "Filtered by \(hit.filter.match.label.lowercased()) “\(hit.filter.pattern)”"
+    }
+
+    private func revealStub(_ number: PostNumber) {
+        revealedStubs.insert(number)
+        ChanHaptics.selection()
+        reconfigure(number)
+    }
+
+    /// Scrolls to a post from outside the controller (e.g. a summary citation).
+    public func scrollToPost(_ number: PostNumber) {
+        navigate(to: number, from: nil)
+    }
+
+    /// Jumps to `number`, remembering `source` so the relevant quote link inside
+    /// the destination can be highlighted.
+    private func navigate(to number: PostNumber, from source: PostNumber?) {
         guard let indexPath = dataSource.indexPath(for: number) else { return }
+
+        if let source {
+            highlightTargets[number] = source
+            reconfigure(number)
+        }
+
         ChanHaptics.softTap()
         collectionView.scrollToItem(at: indexPath, at: .centeredVertically, animated: true)
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             (self?.collectionView.cellForItem(at: indexPath) as? PostCell)?.flash()
         }
+
+        if source != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
+                self?.highlightTargets[number] = nil
+                self?.reconfigure(number)
+            }
+        }
+    }
+
+    private func showPeek(for number: PostNumber, from source: PostNumber?) {
+        guard let post = store.graph.post(number) else { return }
+        peek.show(
+            post: post,
+            board: store.board,
+            theme: theme,
+            fontSize: fontSize,
+            replyCount: store.graph.replyCount(of: number),
+            isMine: store.myPosts.contains(number),
+            in: view,
+            onJump: { [weak self] in
+                self?.peek.dismiss()
+                self?.navigate(to: number, from: source)
+            }
+        )
     }
 
     @objc private func refreshPulled() {
@@ -144,23 +250,39 @@ extension ThreadViewController: UICollectionViewDelegate {
         guard let number = dataSource.itemIdentifier(for: indexPath) else { return }
         try? store.markRead(upTo: number)
     }
+
+    public func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        peek.dismiss()
+    }
 }
 
-/// One post. OP posts render a subject, statistics and a larger header.
+// MARK: - Post cell
+
+/// One post: header, body, media, backlinks, and an optional filter stub.
 final class PostCell: UICollectionViewCell {
     static let reuseIdentifier = "PostCell"
 
     var onQuoteTap: ((PostNumber) -> Void)?
+    var onQuoteLongPress: ((PostNumber) -> Void)?
     var onLinkTap: ((URL) -> Void)?
     var onMediaTap: (() -> Void)?
+    var onBacklinkTap: ((PostNumber) -> Void)?
+    var onBacklinkLongPress: ((PostNumber) -> Void)?
+    var onStubTap: (() -> Void)?
+    var onMarkAsMine: (() -> Void)?
 
     private let container = UIView()
+    private let accentBar = UIView()
     private let headerLabel = UILabel()
     private let subjectLabel = UILabel()
     private let bodyTextView = PostTextView()
     private let mediaView = MediaThumbnailView()
+    private let backlinkRow = BacklinkRowView()
+    private let stubView = StubRowView()
     private let footerLabel = UILabel()
     private let opTag = ChanTagLabel()
+    private let ownerTag = ChanTagLabel()
+    private let youTag = ChanTagLabel()
 
     private var mediaZeroHeightConstraint: NSLayoutConstraint!
     private var mediaMinHeightConstraint: NSLayoutConstraint!
@@ -183,8 +305,13 @@ final class PostCell: UICollectionViewCell {
 
         container.layer.cornerRadius = ChanRadius.medium
         container.layer.cornerCurve = .continuous
+        container.clipsToBounds = true
         container.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(container)
+
+        accentBar.translatesAutoresizingMaskIntoConstraints = false
+        accentBar.isHidden = true
+        container.addSubview(accentBar)
 
         headerLabel.numberOfLines = 1
         subjectLabel.numberOfLines = 0
@@ -193,17 +320,33 @@ final class PostCell: UICollectionViewCell {
 
         opTag.text = "OP"
         opTag.isHidden = true
+        ownerTag.text = "ME"
+        ownerTag.isHidden = true
+        youTag.text = "(YOU)"
+        youTag.isHidden = true
 
         bodyTextView.onQuoteTap = { [weak self] number in self?.onQuoteTap?(number) }
+        bodyTextView.onQuoteLongPress = { [weak self] number in self?.onQuoteLongPress?(number) }
         bodyTextView.onLinkTap = { [weak self] url in self?.onLinkTap?(url) }
+        bodyTextView.onSpoilerReveal = { [weak self] in self?.setNeedsLayout() }
         mediaView.onTap = { [weak self] in self?.onMediaTap?() }
+        backlinkRow.onTap = { [weak self] number in self?.onBacklinkTap?(number) }
+        backlinkRow.onLongPress = { [weak self] number in self?.onBacklinkLongPress?(number) }
+        stubView.onTap = { [weak self] in self?.onStubTap?() }
 
-        let headerRow = UIStackView(arrangedSubviews: [opTag, headerLabel])
+        let tagRow = UIStackView(arrangedSubviews: [opTag, ownerTag, youTag])
+        tagRow.axis = .horizontal
+        tagRow.spacing = 4
+        tagRow.alignment = .center
+
+        let headerRow = UIStackView(arrangedSubviews: [tagRow, headerLabel])
         headerRow.axis = .horizontal
         headerRow.spacing = 6
         headerRow.alignment = .center
 
-        let stack = UIStackView(arrangedSubviews: [headerRow, subjectLabel, bodyTextView, mediaView, footerLabel])
+        let stack = UIStackView(arrangedSubviews: [
+            headerRow, subjectLabel, bodyTextView, mediaView, backlinkRow, stubView, footerLabel,
+        ])
         stack.axis = .vertical
         stack.spacing = 6
         stack.setCustomSpacing(2, after: headerRow)
@@ -221,7 +364,12 @@ final class PostCell: UICollectionViewCell {
             container.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             container.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
 
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            accentBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            accentBar.topAnchor.constraint(equalTo: container.topAnchor),
+            accentBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 13),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
@@ -235,25 +383,85 @@ final class PostCell: UICollectionViewCell {
         mediaAspectConstraint = nil
         bodyTextView.configure(body: PostBody(runs: []), theme: .dark, fontSize: 15)
         onQuoteTap = nil
+        onQuoteLongPress = nil
         onLinkTap = nil
         onMediaTap = nil
+        onBacklinkTap = nil
+        onBacklinkLongPress = nil
+        onStubTap = nil
+        onMarkAsMine = nil
     }
 
-    func configure(post: Post, board: BoardID, theme: ChanTheme, fontSize: CGFloat) {
-        container.backgroundColor = UIColor(theme.surface)
+    func configure(
+        post: Post,
+        board: BoardID,
+        theme: ChanTheme,
+        fontSize: CGFloat,
+        isStub: Bool,
+        stubReason: String?,
+        backlinks: [PostNumber],
+        annotations: [PostNumber: String],
+        isMine: Bool,
+        quotesYou: Bool,
+        isHighlighted: Bool,
+        highlightedQuote: PostNumber?
+    ) {
+        container.backgroundColor = isHighlighted
+            ? UIColor(theme.accent).withAlphaComponent(0.12)
+            : UIColor(theme.surface)
+
+        // The accent bar encodes the post's relationship to the reader, the way
+        // 4chan-X's `.quotesYou` and own-post borders do.
+        if isMine {
+            accentBar.backgroundColor = UIColor(theme.accent)
+            accentBar.isHidden = false
+        } else if quotesYou {
+            accentBar.backgroundColor = UIColor(theme.danger)
+            accentBar.isHidden = false
+        } else {
+            accentBar.isHidden = true
+        }
+
         headerLabel.attributedText = header(for: post, theme: theme)
+        opTag.backgroundColor = UIColor(theme.accent)
+        opTag.isHidden = !post.isOP
+        ownerTag.backgroundColor = UIColor(theme.link)
+        ownerTag.isHidden = !isMine
+        youTag.backgroundColor = UIColor(theme.danger)
+        youTag.isHidden = !quotesYou
+
+        stubView.isHidden = !isStub
+        subjectLabel.isHidden = isStub
+        bodyTextView.isHidden = isStub
+        footerLabel.isHidden = isStub
+        backlinkRow.isHidden = isStub || backlinks.isEmpty
+
+        if isStub {
+            stubView.configure(reason: stubReason ?? "Filtered", replyCount: backlinks.count, theme: theme)
+            mediaAspectConstraint?.isActive = false
+            mediaAspectConstraint = nil
+            mediaMinHeightConstraint.isActive = false
+            mediaMaxHeightConstraint.isActive = false
+            mediaZeroHeightConstraint.isActive = true
+            mediaView.isHidden = true
+            mediaView.reset()
+            return
+        }
+
         subjectLabel.attributedText = subject(for: post, theme: theme)
         subjectLabel.isHidden = subjectLabel.attributedText?.length == 0
 
-        opTag.backgroundColor = UIColor(theme.accent)
-        opTag.isHidden = !post.isOP
-
         let body = PostHTMLParser.parse(post.commentHTML ?? "")
-        bodyTextView.configure(body: body, theme: theme, fontSize: fontSize)
+        bodyTextView.configure(
+            body: body,
+            theme: theme,
+            fontSize: fontSize,
+            quoteAnnotations: annotations,
+            highlightedQuote: highlightedQuote
+        )
 
-        // Size the media box to the attachment's real aspect ratio, clamped to a
-        // sane range. The box matches the image exactly, so `.fit` never
-        // letterboxes in the common case and never distorts in any case.
+        backlinkRow.configure(backlinks: backlinks, annotations: annotations, theme: theme)
+
         mediaAspectConstraint?.isActive = false
         mediaAspectConstraint = nil
 
@@ -304,18 +512,16 @@ final class PostCell: UICollectionViewCell {
 
     private func header(for post: Post, theme: ChanTheme) -> NSAttributedString {
         let output = NSMutableAttributedString()
-        let nameFont = UIFont.systemFont(ofSize: 12, weight: .semibold)
 
-        let name = post.name ?? "Anonymous"
         output.append(NSAttributedString(
-            string: name,
-            attributes: [.font: nameFont, .foregroundColor: UIColor(theme.primaryText)]
+            string: post.name ?? "Anonymous",
+            attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: UIColor(theme.primaryText)]
         ))
 
         if let trip = post.trip {
             output.append(NSAttributedString(
                 string: " \(trip)",
-                attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .regular), .foregroundColor: UIColor(theme.accent)]
+                attributes: [.font: UIFont.systemFont(ofSize: 12), .foregroundColor: UIColor(theme.accent)]
             ))
         }
         if let capcode = post.capcode {
@@ -331,16 +537,21 @@ final class PostCell: UICollectionViewCell {
             ))
         }
 
-        let date = ChanFormat.postDate(post.time)
         output.append(NSAttributedString(
-            string: "  \(date)",
-            attributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular), .foregroundColor: UIColor(theme.tertiaryText)]
+            string: "  \(ChanFormat.postDate(post.time))",
+            attributes: [
+                .font: UIFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
+                .foregroundColor: UIColor(theme.tertiaryText),
+            ]
         ))
 
         if let posterID = post.posterID {
             output.append(NSAttributedString(
                 string: "  ID:\(posterID)",
-                attributes: [.font: UIFont.monospacedSystemFont(ofSize: 10, weight: .regular), .foregroundColor: UIColor(theme.tertiaryText)]
+                attributes: [
+                    .font: UIFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+                    .foregroundColor: UIColor(theme.tertiaryText),
+                ]
             ))
         }
 
@@ -355,6 +566,188 @@ final class PostCell: UICollectionViewCell {
         )
     }
 }
+
+// MARK: - Backlinks
+
+/// The replies a post received, as tappable `>>N` chips.
+final class BacklinkRowView: UIView {
+    var onTap: ((PostNumber) -> Void)?
+    var onLongPress: ((PostNumber) -> Void)?
+
+    private let glyph = UILabel()
+    private let scrollView = UIScrollView()
+    private let stack = UIStackView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setUp()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUp()
+    }
+
+    private func setUp() {
+        glyph.text = "↩"
+        glyph.font = .systemFont(ofSize: 11, weight: .bold)
+        glyph.setContentHuggingPriority(.required, for: .horizontal)
+        glyph.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glyph)
+
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scrollView)
+
+        stack.axis = .horizontal
+        stack.spacing = 5
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            glyph.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            scrollView.leadingAnchor.constraint(equalTo: glyph.trailingAnchor, constant: 5),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scrollView.heightAnchor.constraint(equalToConstant: 22),
+
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            stack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
+        ])
+    }
+
+    func configure(backlinks: [PostNumber], annotations: [PostNumber: String], theme: ChanTheme) {
+        stack.arrangedSubviews.forEach { view in
+            stack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        glyph.textColor = UIColor(theme.tertiaryText)
+
+        for number in backlinks {
+            let chip = BacklinkChip()
+            chip.number = number
+            chip.configure(
+                text: annotations[number].map { ">>\(number.value) \($0)" } ?? ">>\(number.value)",
+                theme: theme,
+                emphasized: annotations[number] != nil
+            )
+            chip.addTarget(self, action: #selector(chipTapped(_:)), for: .touchUpInside)
+            chip.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(chipLongPressed(_:))))
+            stack.addArrangedSubview(chip)
+        }
+    }
+
+    @objc private func chipTapped(_ chip: BacklinkChip) {
+        onTap?(chip.number)
+    }
+
+    @objc private func chipLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let chip = gesture.view as? BacklinkChip else { return }
+        onLongPress?(chip.number)
+    }
+}
+
+/// A small tappable `>>N` chip.
+final class BacklinkChip: UIControl {
+    var number: PostNumber = 0
+    private let label = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setUp()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUp()
+    }
+
+    private func setUp() {
+        label.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isUserInteractionEnabled = false
+        addSubview(label)
+        layer.cornerRadius = 6
+        layer.cornerCurve = .continuous
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 20),
+        ])
+    }
+
+    func configure(text: String, theme: ChanTheme, emphasized: Bool) {
+        label.text = text
+        label.textColor = emphasized ? UIColor(theme.accent) : UIColor(theme.secondaryText)
+        backgroundColor = UIColor(theme.elevated)
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            alpha = isHighlighted ? 0.6 : 1
+        }
+    }
+}
+
+// MARK: - Stub
+
+/// The collapsed placeholder a `stub` filter action produces.
+final class StubRowView: UIControl {
+    var onTap: (() -> Void)?
+
+    private let label = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setUp()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUp()
+    }
+
+    private func setUp() {
+        label.numberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isUserInteractionEnabled = false
+        addSubview(label)
+        layer.cornerRadius = ChanRadius.small
+        layer.cornerCurve = .continuous
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+        ])
+
+        addTarget(self, action: #selector(handleTap), for: .touchUpInside)
+    }
+
+    func configure(reason: String, replyCount: Int, theme: ChanTheme) {
+        let replies = replyCount > 0 ? " · \(replyCount) \(replyCount == 1 ? "reply" : "replies")" : ""
+        label.text = "\(reason)\(replies)\nTap to show"
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = UIColor(theme.secondaryText)
+        backgroundColor = UIColor(theme.elevated)
+    }
+
+    @objc private func handleTap() {
+        onTap?()
+    }
+}
+
+// MARK: - Media
 
 /// Thumbnail with a format badge and spoiler treatment.
 final class MediaThumbnailView: UIView {

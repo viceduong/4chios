@@ -10,6 +10,7 @@ let package = Package(
     dependencies: [
         .package(path: "../ChanCore"),
         .package(path: "../ChanAPI"),
+        .package(path: "../ChanAI"),
         .package(path: "../ChanDB"),
         .package(path: "../ChanMedia"),
         .package(path: "../ChanUI"),
@@ -20,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "ChanCore", package: "ChanCore"),
                 .product(name: "ChanAPI", package: "ChanAPI"),
+                .product(name: "ChanAI", package: "ChanAI"),
                 .product(name: "ChanDB", package: "ChanDB"),
                 .product(name: "ChanMedia", package: "ChanMedia"),
                 .product(name: "ChanUI", package: "ChanUI"),

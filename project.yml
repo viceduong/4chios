@@ -25,6 +25,8 @@ packages:
     path: Packages/ChanCore
   ChanAPI:
     path: Packages/ChanAPI
+  ChanAI:
+    path: Packages/ChanAI
   ChanDB:
     path: Packages/ChanDB
   ChanMedia:
@@ -66,6 +68,9 @@ targets:
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
           - com.viceduong.ch4ios.refresh
+        # Empty by default; CI (or a local build) may inject the real key.
+        # Never commit an actual key here.
+        GeneralComputeAPIKey: ""
         NSCameraUsageDescription: 4chios uses the camera so you can attach a photo to a post.
         NSPhotoLibraryUsageDescription: 4chios needs access to your photos so you can attach an image to a post.
         NSPhotoLibraryAddUsageDescription: 4chios saves images and videos you choose to your photo library.

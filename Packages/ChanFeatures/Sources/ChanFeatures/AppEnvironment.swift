@@ -1,3 +1,4 @@
+import ChanAI
 import ChanAPI
 import ChanCore
 import ChanDB
@@ -85,6 +86,40 @@ public final class ChanSettings: ObservableObject {
         didSet { save() }
     }
 
+    // MARK: - AI summaries
+
+    /// OpenAI-compatible endpoint. Defaults to General Compute, which serves
+    /// `gemma-4-31B-it` (text + image input).
+    @Published public var aiEndpoint: String {
+        didSet { save() }
+    }
+
+    @Published public var aiModel: String {
+        didSet { save() }
+    }
+
+    /// Whether thread images may be sent to the model.
+    @Published public var aiSendsImages: Bool {
+        didSet { save() }
+    }
+
+    /// Held in the Keychain, never in UserDefaults.
+    @Published public var aiAPIKey: String {
+        didSet { ChanKeychain.set(aiAPIKey, for: Keys.aiAPIKey) }
+    }
+
+    public var isAIConfigured: Bool {
+        !aiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    public var aiConfiguration: AIConfiguration {
+        AIConfiguration(
+            baseURL: URL(string: aiEndpoint) ?? AIConfiguration.generalComputeBaseURL,
+            apiKey: aiAPIKey,
+            model: aiModel.isEmpty ? AIConfiguration.generalComputeModel : aiModel
+        )
+    }
+
     private let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) {
@@ -95,6 +130,23 @@ public final class ChanSettings: ObservableObject {
         fontSize = storedSize > 0 ? CGFloat(storedSize) : 15
         favoriteBoards = (defaults.stringArray(forKey: Keys.favoriteBoards) ?? []).map { BoardID($0) }
         showThumbnails = defaults.object(forKey: Keys.showThumbnails) as? Bool ?? true
+
+        aiEndpoint = defaults.string(forKey: Keys.aiEndpoint)
+            ?? AIConfiguration.generalComputeBaseURL.absoluteString
+        aiModel = defaults.string(forKey: Keys.aiModel) ?? AIConfiguration.generalComputeModel
+        aiSendsImages = defaults.object(forKey: Keys.aiSendsImages) as? Bool ?? true
+
+        // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
+        // so local builds work without pasting anything. Never committed.
+        if let stored = ChanKeychain.string(for: Keys.aiAPIKey) {
+            aiAPIKey = stored
+        } else if let injected = Bundle.main.object(forInfoDictionaryKey: "GeneralComputeAPIKey") as? String,
+                  !injected.isEmpty {
+            aiAPIKey = injected
+            ChanKeychain.set(injected, for: Keys.aiAPIKey)
+        } else {
+            aiAPIKey = ""
+        }
     }
 
     /// Resolves the effective theme for a color scheme.
@@ -124,6 +176,10 @@ public final class ChanSettings: ObservableObject {
         defaults.set(Double(fontSize), forKey: Keys.fontSize)
         defaults.set(favoriteBoards.map(\.rawValue), forKey: Keys.favoriteBoards)
         defaults.set(showThumbnails, forKey: Keys.showThumbnails)
+        defaults.set(aiEndpoint, forKey: Keys.aiEndpoint)
+        defaults.set(aiModel, forKey: Keys.aiModel)
+        defaults.set(aiSendsImages, forKey: Keys.aiSendsImages)
+        // The API key deliberately never reaches UserDefaults.
     }
 
     private enum Keys {
@@ -131,5 +187,9 @@ public final class ChanSettings: ObservableObject {
         static let fontSize = "settings.fontSize"
         static let favoriteBoards = "settings.favoriteBoards"
         static let showThumbnails = "settings.showThumbnails"
+        static let aiEndpoint = "settings.aiEndpoint"
+        static let aiModel = "settings.aiModel"
+        static let aiSendsImages = "settings.aiSendsImages"
+        static let aiAPIKey = "settings.aiAPIKey"
     }
 }

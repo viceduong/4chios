@@ -163,12 +163,25 @@ public final class ThreadStore: ObservableObject {
 
     /// The verdict for one post, used for stubbing and highlighting.
     public func filterDecision(for post: Post) -> ChanFilterDecision {
-        filterEngine.decision(for: post, in: filterContext)
+        filterEngine.decision(for: post, in: currentContext())
     }
 
     /// Which rules matched, so a stub can explain itself.
     public func filterMatches(for post: Post) -> [ChanFilterEngine.Match] {
-        filterEngine.matches(for: post, in: filterContext)
+        filterEngine.matches(for: post, in: currentContext())
+    }
+
+    /// Marks a post as written by the user, so replies to it read as `(You)`.
+    public func markAsMine(_ number: PostNumber) {
+        try? environment.database.markAsMine(board: board, number: number, thread: op)
+        myPosts.insert(number)
+        contextCache = nil
+    }
+
+    public func unmarkAsMine(_ number: PostNumber) {
+        try? environment.database.removeMyPost(board: board, number: number)
+        myPosts.remove(number)
+        contextCache = nil
     }
 
     /// Posts that quote one of the user's posts.
@@ -187,19 +200,27 @@ public final class ThreadStore: ObservableObject {
         return annotations
     }
 
-    private var filterContext: ChanFilterContext {
+    /// Built once per refresh instead of per cell — the board lookup is a
+    /// database read, and the cell provider runs it for every post.
+    private var contextCache: ChanFilterContext?
+
+    private func currentContext() -> ChanFilterContext {
+        if let contextCache { return contextCache }
         let boardInfo = try? environment.database.board(board)
-        return ChanFilterContext(
+        let context = ChanFilterContext(
             board: board,
             isWorkSafe: boardInfo?.isWorkSafe ?? false,
             myPosts: myPosts,
             opNumber: op
         )
+        contextCache = context
+        return context
     }
 
     private func refreshFilterState() {
         filterEngine = ChanFilterEngine(filters: (try? environment.database.filters()) ?? [])
         myPosts = (try? environment.database.myPostNumbers(board: board)) ?? []
+        contextCache = nil
     }
 
     public func refresh() async {
