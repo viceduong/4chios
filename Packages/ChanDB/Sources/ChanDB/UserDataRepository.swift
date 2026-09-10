@@ -212,33 +212,38 @@ public extension ChanDatabase {
     // MARK: - Filters
     @discardableResult
     func saveFilter(_ filter: ChanFilter) throws -> ChanFilter {
-        try writer.write { db in
+        let json = try Self.encode(filter)
+        // The legacy `kind` column is NOT NULL; the match mode is the closest
+        // equivalent now that fields drive matching.
+        let legacyKind = filter.match.rawValue
+        let legacyBoard = filter.scope.included.first
+
+        return try writer.write { db in
             if filter.id == 0 {
                 try db.execute(
                     sql: """
-                    INSERT INTO filter (board_id, kind, pattern, action, enabled, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO filter (board_id, kind, pattern, action, enabled, created_at, json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     arguments: [
-                        filter.board?.rawValue, filter.kind.rawValue, filter.pattern,
+                        legacyBoard, legacyKind, filter.pattern,
                         filter.action.rawValue, filter.enabled, filter.createdAt.timeIntervalSince1970,
+                        json,
                     ]
                 )
-                return ChanFilter(
-                    id: db.lastInsertedRowID,
-                    board: filter.board,
-                    kind: filter.kind,
-                    pattern: filter.pattern,
-                    action: filter.action,
-                    enabled: filter.enabled,
-                    createdAt: filter.createdAt
-                )
+                var saved = filter
+                saved.id = db.lastInsertedRowID
+                return saved
             }
+
             try db.execute(
-                sql: "UPDATE filter SET board_id = ?, kind = ?, pattern = ?, action = ?, enabled = ? WHERE id = ?",
+                sql: """
+                UPDATE filter SET board_id = ?, kind = ?, pattern = ?, action = ?, enabled = ?, json = ?
+                WHERE id = ?
+                """,
                 arguments: [
-                    filter.board?.rawValue, filter.kind.rawValue, filter.pattern,
-                    filter.action.rawValue, filter.enabled, filter.id,
+                    legacyBoard, legacyKind, filter.pattern,
+                    filter.action.rawValue, filter.enabled, json, filter.id,
                 ]
             )
             return filter
@@ -255,22 +260,66 @@ public extension ChanDatabase {
         try writer.read { db in
             try Row.fetchAll(
                 db,
-                sql: "SELECT id, board_id, kind, pattern, action, enabled, created_at FROM filter ORDER BY created_at"
+                sql: """
+                SELECT id, board_id, kind, pattern, action, enabled, created_at, json
+                FROM filter ORDER BY created_at
+                """
             )
-            .compactMap { row in
-                let boardID: String? = row["board_id"]
-                guard let kind = ChanFilterKind(rawValue: row["kind"]),
-                      let action = ChanFilterAction(rawValue: row["action"]) else { return nil }
-                return ChanFilter(
-                    id: row["id"],
-                    board: boardID.map { BoardID($0) },
-                    kind: kind,
-                    pattern: row["pattern"],
-                    action: action,
-                    enabled: row["enabled"],
-                    createdAt: Date(timeIntervalSince1970: row["created_at"])
-                )
+            .compactMap { row -> ChanFilter? in
+                let json: String? = row["json"]
+                if let json, var filter = try? Self.decode(ChanFilter.self, from: json) {
+                    // The row id is authoritative.
+                    let identifier: Int64 = row["id"]
+                    filter.id = identifier
+                    return filter
+                }
+                return Self.legacyFilter(from: row)
             }
         }
+    }
+
+    /// Converts a rule written before schema v3 into the current model.
+    private static func legacyFilter(from row: Row) -> ChanFilter? {
+        let kind: String = row["kind"]
+        let pattern: String = row["pattern"]
+        guard let action = ChanFilterAction(rawValue: row["action"]) else { return nil }
+
+        let boardID: String? = row["board_id"]
+        let enabled: Bool = row["enabled"]
+        let createdAt: Double = row["created_at"]
+
+        let fields: [ChanFilterField]
+        let match: ChanFilterMatch
+        switch kind {
+        case "regex":
+            fields = ChanFilterField.standard
+            match = .regex
+        case "posterID":
+            fields = [.posterID]
+            match = .exact
+        case "tripcode":
+            fields = [.tripcode]
+            match = .exact
+        case "capcode":
+            fields = [.capcode]
+            match = .exact
+        case "filename":
+            fields = [.filename]
+            match = .keyword
+        default:
+            fields = ChanFilterField.standard
+            match = .keyword
+        }
+
+        return ChanFilter(
+            id: row["id"],
+            fields: fields,
+            match: match,
+            pattern: pattern,
+            scope: ChanBoardScope(included: boardID.map { [$0] } ?? []),
+            action: action,
+            enabled: enabled,
+            createdAt: Date(timeIntervalSince1970: createdAt)
+        )
     }
 }

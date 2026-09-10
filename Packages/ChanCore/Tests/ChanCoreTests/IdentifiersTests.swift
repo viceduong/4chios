@@ -22,6 +22,7 @@ final class IdentifiersTests: XCTestCase {
     }
 
     func testSchemaVersionMatchesDesign() {
-        XCTAssertEqual(ChanVersion.schemaVersion, 1)
+        // Bump alongside every new migration; ChanDB cross-checks this value.
+        XCTAssertEqual(ChanVersion.schemaVersion, 3)
     }
 }

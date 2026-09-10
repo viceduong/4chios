@@ -70,14 +70,22 @@ public final class CatalogStore: ObservableObject {
         self.environment = environment
     }
 
-    public var filterEngine: ChanFilterEngine {
-        let filters = (try? environment.database.filters()) ?? []
-        return ChanFilterEngine(filters: filters)
+    /// Compiled once per load rather than once per cell.
+    private var filterEngine = ChanFilterEngine(filters: [])
+
+    private var filterContext: ChanFilterContext {
+        let boardInfo = try? environment.database.board(board)
+        return ChanFilterContext(board: board, isWorkSafe: boardInfo?.isWorkSafe ?? false)
+    }
+
+    private func refreshFilterEngine() {
+        filterEngine = ChanFilterEngine(filters: (try? environment.database.filters()) ?? [])
     }
 
     public func loadIfNeeded() async {
         guard !hasLoaded else { return }
         hasLoaded = true
+        refreshFilterEngine()
 
         if let cached = try? environment.database.catalog(board: board), !cached.isEmpty {
             threads = applyFilters(cached)
@@ -90,6 +98,7 @@ public final class CatalogStore: ObservableObject {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        refreshFilterEngine()
 
         do {
             let fetched = try await environment.client.catalog(board)
@@ -106,9 +115,9 @@ public final class CatalogStore: ObservableObject {
     }
 
     private func applyFilters(_ posts: [Post]) -> [Post] {
-        let engine = filterEngine
-        guard !engine.isEmpty else { return posts }
-        return posts.filter { !engine.hidesThread($0, in: board) }
+        guard !filterEngine.isEmpty else { return posts }
+        let context = filterContext
+        return posts.filter { !filterEngine.hidesThread($0, in: context) }
     }
 }
 
@@ -132,15 +141,65 @@ public final class ThreadStore: ObservableObject {
         self.environment = environment
     }
 
+    /// Quote relationships for the whole thread, kept up to date incrementally.
+    @Published public private(set) var graph = PostGraph()
+    /// Posts the user wrote here, so quotes aimed at them can be marked `(You)`.
+    @Published public private(set) var myPosts: Set<PostNumber> = []
+
+    private var filterEngine = ChanFilterEngine(filters: [])
+
     public func loadIfNeeded() async {
         guard !hasLoaded else { return }
         hasLoaded = true
+        refreshFilterState()
 
         if let cached = try? environment.database.posts(board: board, op: op), !cached.isEmpty {
             posts = cached
+            graph.reset(with: cached)
         }
 
         await refresh()
+    }
+
+    /// The verdict for one post, used for stubbing and highlighting.
+    public func filterDecision(for post: Post) -> ChanFilterDecision {
+        filterEngine.decision(for: post, in: filterContext)
+    }
+
+    /// Which rules matched, so a stub can explain itself.
+    public func filterMatches(for post: Post) -> [ChanFilterEngine.Match] {
+        filterEngine.matches(for: post, in: filterContext)
+    }
+
+    /// Posts that quote one of the user's posts.
+    public func quotesUser(_ post: Post) -> Bool {
+        graph.quotesUser(post.no, myPosts: myPosts)
+    }
+
+    /// `>>123` links inside a post, annotated with `OP` / `You`.
+    public func quoteAnnotations(for post: Post) -> [PostNumber: String] {
+        var annotations: [PostNumber: String] = [:]
+        for quoted in graph.quoted(by: post.no) {
+            if let label = graph.annotation(for: quoted, myPosts: myPosts) {
+                annotations[quoted] = label
+            }
+        }
+        return annotations
+    }
+
+    private var filterContext: ChanFilterContext {
+        let boardInfo = try? environment.database.board(board)
+        return ChanFilterContext(
+            board: board,
+            isWorkSafe: boardInfo?.isWorkSafe ?? false,
+            myPosts: myPosts,
+            opNumber: op
+        )
+    }
+
+    private func refreshFilterState() {
+        filterEngine = ChanFilterEngine(filters: (try? environment.database.filters()) ?? [])
+        myPosts = (try? environment.database.myPostNumbers(board: board)) ?? []
     }
 
     public func refresh() async {
@@ -152,6 +211,8 @@ public final class ThreadStore: ObservableObject {
             let fetched = try await environment.client.thread(board, op: op)
             try? environment.database.saveThread(board: board, op: op, posts: fetched)
             posts = fetched
+            graph.reset(with: fetched)
+            refreshFilterState()
             didReachEnd = false
         } catch let error as ChanError {
             if case .gone = error {
@@ -175,6 +236,7 @@ public final class ThreadStore: ObservableObject {
             guard !fresh.isEmpty else { return }
             try? environment.database.appendTail(board: board, op: op, posts: fresh)
             posts.append(contentsOf: fresh)
+            graph.insert(contentsOf: fresh)
         } catch let error as ChanError {
             if case .gone = error { didReachEnd = true }
         } catch {

@@ -173,6 +173,15 @@ public final class ChanDatabase: @unchecked Sendable {
             try db.create(index: "my_post_thread", on: "my_post", columns: ["board_id", "thread_no"])
         }
 
+        // v3: the filter rule language grew fields, match modes and board scopes,
+        // so rules are stored as a JSON document. Legacy columns are kept so rows
+        // written by earlier builds still load.
+        migrator.registerMigration("v3") { db in
+            try db.alter(table: "filter") { table in
+                table.add(column: "json", .text)
+            }
+        }
+
         return migrator
     }
     // MARK: - JSON codec

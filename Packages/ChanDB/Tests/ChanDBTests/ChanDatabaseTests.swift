@@ -123,19 +123,39 @@ final class ChanDatabaseTests: XCTestCase {
 
     func testFiltersCRUD() throws {
         let saved = try database.saveFilter(
-            ChanFilter(board: "g", kind: .keyword, pattern: "spam", action: .hidePost)
+            ChanFilter(
+                fields: [.comment],
+                match: .keyword,
+                pattern: "spam",
+                scope: ChanBoardScope(included: ["g"]),
+                action: .hidePost
+            )
         )
         XCTAssertGreaterThan(saved.id, 0)
 
         var filters = try database.filters()
         XCTAssertEqual(filters.count, 1)
         XCTAssertEqual(filters[0].pattern, "spam")
+        XCTAssertEqual(filters[0].fields, [.comment])
+        XCTAssertEqual(filters[0].scope, ChanBoardScope(included: ["g"]))
 
+        // Everything the rule language gained must survive a round trip.
         try database.saveFilter(
-            ChanFilter(id: saved.id, board: "g", kind: .regex, pattern: "\\d+", action: .hideThread, enabled: false)
+            ChanFilter(
+                id: saved.id,
+                fields: [.subject, .filename],
+                match: .regex,
+                pattern: "/\\d+/i",
+                scope: ChanBoardScope(included: ["nsfw"], excluded: ["pol"]),
+                action: .stub,
+                enabled: false
+            )
         )
         filters = try database.filters()
-        XCTAssertEqual(filters[0].kind, .regex)
+        XCTAssertEqual(filters[0].match, .regex)
+        XCTAssertEqual(filters[0].fields, [.subject, .filename])
+        XCTAssertEqual(filters[0].scope, ChanBoardScope(included: ["nsfw"], excluded: ["pol"]))
+        XCTAssertEqual(filters[0].action, .stub)
         XCTAssertFalse(filters[0].enabled)
 
         try database.deleteFilter(id: saved.id)
