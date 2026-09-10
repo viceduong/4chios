@@ -113,7 +113,7 @@ public struct ThreadChatSession: Sendable {
 
         // A server tool cannot be forced from the request, so an explicit
         // request becomes an instruction instead.
-        let insist = alwaysOffered && useWebSearch
+        let insist = alwaysOffered && (useWebSearch || SearchIntent.requiresWeb(trimmed))
         let messages = self.messages(for: trimmed, history: history, insistingOnSearch: insist)
 
         var reply: AIChatReply

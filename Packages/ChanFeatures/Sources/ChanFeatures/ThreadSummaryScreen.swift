@@ -137,7 +137,9 @@ public struct ThreadSummaryScreen: View {
 
     private var composer: some View {
         HStack(spacing: ChanSpacing.s) {
-            if chat.canSearch {
+            // Only shown when it actually changes what happens. Search is
+            // always available otherwise, so a toggle would be decoration.
+            if chat.canSearch, chat.searchNeedsOptIn {
                 Button {
                     chat.useWebSearch.toggle()
                     ChanHaptics.tap()
@@ -149,7 +151,7 @@ public struct ThreadSummaryScreen: View {
                         .background(chat.useWebSearch ? theme.accent : Color.clear)
                         .clipShape(Circle())
                 }
-                .accessibilityLabel(chat.useWebSearch ? "Web search on" : "Web search off")
+                .accessibilityLabel(chat.useWebSearch ? "Search every message" : "Search only when asked")
             }
 
             TextField("Ask about this thread", text: $draft)

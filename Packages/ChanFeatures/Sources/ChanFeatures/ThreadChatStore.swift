@@ -30,6 +30,18 @@ public final class ThreadChatStore: ObservableObject {
         environment.settings.canSearchTheWeb
     }
 
+    /// True when search only runs if the reader asks for it.
+    ///
+    /// With a direct provider or the server tool, search is always offered and
+    /// costs nothing unless the model uses it, so there is nothing to toggle.
+    /// The plugin is the one path that needs opting into, because it searches on
+    /// every message it is attached to.
+    public var searchNeedsOptIn: Bool {
+        let configuration = environment.settings.aiConfiguration
+        guard configuration.directSearch?.isConfigured != true else { return false }
+        return configuration.search?.mode == .plugin
+    }
+
     public var isConfigured: Bool {
         environment.settings.isAIConfigured
     }
