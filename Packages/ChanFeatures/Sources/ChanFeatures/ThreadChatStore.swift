@@ -77,7 +77,11 @@ public final class ThreadChatStore: ObservableObject {
                 if Task.isCancelled { return }
                 self.turns.append(reply)
                 self.persist()
-                self.environment.usage.record(reply.usage, model: reply.model)
+                self.environment.usage.record(
+                    reply.usage,
+                    model: reply.model,
+                    searchCostUSD: reply.searchCostUSD
+                )
             } catch let error as AIChatError {
                 if case .cancelled = error { } else { self.errorMessage = error.userMessage }
             } catch {

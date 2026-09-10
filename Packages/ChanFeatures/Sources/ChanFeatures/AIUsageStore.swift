@@ -23,6 +23,8 @@ public final class AIUsageStore: ObservableObject {
         public var requests = 0
         public var lastModel = ""
         public var lastUsedAt: Date?
+        /// Measured search spend, when the provider reports a price.
+        public var searchSpendUSD: Double?
         public var byModel: [String: ModelTotals] = [:]
     }
 
@@ -47,7 +49,11 @@ public final class AIUsageStore: ObservableObject {
         }
     }
 
-    public func record(_ usage: AIUsage?, model: String) {
+    public func record(_ usage: AIUsage?, model: String, searchCostUSD: Double? = nil) {
+        if let searchCostUSD {
+            snapshot.searchSpendUSD = (snapshot.searchSpendUSD ?? 0) + searchCostUSD
+            persist()
+        }
         guard let usage else { return }
 
         snapshot.totalTokens += usage.totalTokens
@@ -122,6 +128,11 @@ public final class AIUsageStore: ObservableObject {
     /// why there is no dollar figure.
     public var hasUnpricedUsage: Bool {
         snapshot.byModel.keys.contains { AIPricing.rate(for: $0) == nil }
+    }
+
+    /// What searches cost, as reported by the provider rather than estimated.
+    public var measuredSearchSpend: Double {
+        snapshot.searchSpendUSD ?? 0
     }
 
     public var formattedTotalTokens: String {

@@ -72,6 +72,7 @@ jobs:
         env:
           GC_KEY: ${{ secrets.GENERALCOMPUTE_API_KEY }}
           OR_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          EXA_KEY: ${{ secrets.EXA_API_KEY }}
         run: |
           python3 - <<'PYEOF'
           import os, plistlib
@@ -85,6 +86,9 @@ jobs:
           if os.environ.get("OR_KEY"):
               info["OpenRouterAPIKey"] = os.environ["OR_KEY"]
               injected.append("openrouter")
+          if os.environ.get("EXA_KEY"):
+              info["ExaAPIKey"] = os.environ["EXA_KEY"]
+              injected.append("exa")
           with open(path, "wb") as handle:
               plistlib.dump(info, handle)
           print("injected:", ", ".join(injected) or "none (the app asks in Settings)")

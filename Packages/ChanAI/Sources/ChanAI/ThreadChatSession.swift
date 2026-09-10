@@ -100,7 +100,11 @@ public struct ThreadChatSession: Sendable {
         // In server-tool mode the tool is free when unused, so it is always
         // offered and the model decides for itself: no toggle to remember, and
         // no charge on turns that do not need the web.
-        let alwaysOffered = client.canSearch && client.configuration.search?.mode == .serverTool
+        let direct = client.configuration.directSearch.flatMap { $0.isConfigured ? $0 : nil }
+        // A direct provider searches on the app's behalf, and the server tool is
+        // free when unused, so both are simply always offered.
+        let alwaysOffered = direct != nil
+            || (client.canSearch && client.configuration.search?.mode == .serverTool)
         let wantsSearch = alwaysOffered || (client.canSearch && (useWebSearch || SearchIntent.requiresWeb(trimmed)))
 
         // A server tool cannot be forced from the request, so an explicit
@@ -108,7 +112,16 @@ public struct ThreadChatSession: Sendable {
         let insist = alwaysOffered && useWebSearch
         let messages = self.messages(for: trimmed, history: history, insistingOnSearch: insist)
 
-        var reply = try await client.complete(messages, searching: wantsSearch)
+        var reply: AIChatReply
+        if wantsSearch, let direct {
+            reply = try await client.completeWithTools(
+                messages,
+                provider: direct.provider,
+                maximumResults: direct.maximumResults
+            )
+        } else {
+            reply = try await client.complete(messages, searching: wantsSearch)
+        }
         var usedSearch = reply.usedWebSearch
 
         // When the tool was always available the model already had its chance,

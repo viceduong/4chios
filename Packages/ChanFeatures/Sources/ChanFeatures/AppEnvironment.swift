@@ -125,6 +125,12 @@ public final class ChanSettings: ObservableObject {
         didSet { ChanKeychain.set(aiSearchAPIKey, for: Keys.aiSearchAPIKey) }
     }
 
+    /// An Exa key used directly, so searches bill against Exa's own free
+    /// allowance instead of being rented through OpenRouter.
+    @Published public var aiExaAPIKey: String {
+        didSet { ChanKeychain.set(aiExaAPIKey, for: Keys.aiExaAPIKey) }
+    }
+
     /// Which search backend the plugin uses. Pricing is per request, and
     /// Parallel Turbo is seven times cheaper than the Exa default.
     @Published public var aiSearchEngine: AISearchEngine {
@@ -143,7 +149,11 @@ public final class ChanSettings: ObservableObject {
 
     /// True when a search endpoint is configured, so the web toggle can be offered.
     public var canSearchTheWeb: Bool {
-        !aiSearchAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        hasDirectSearch || !aiSearchAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    public var hasDirectSearch: Bool {
+        !aiExaAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     public var aiConfiguration: AIConfiguration {
@@ -159,6 +169,9 @@ public final class ChanSettings: ObservableObject {
                     engine: aiSearchEngine,
                     mode: aiSearchMode
                 )
+                : nil,
+            directSearch: hasDirectSearch
+                ? AIConfiguration.DirectSearchConfiguration(apiKey: aiExaAPIKey)
                 : nil
         )
     }
@@ -186,6 +199,16 @@ public final class ChanSettings: ObservableObject {
 
         // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
         // so local builds work without pasting anything. Never committed.
+        if let exaKey = ChanKeychain.string(for: Keys.aiExaAPIKey) {
+            aiExaAPIKey = exaKey
+        } else if let injected = Bundle.main.object(forInfoDictionaryKey: "ExaAPIKey") as? String,
+                  !injected.isEmpty {
+            aiExaAPIKey = injected
+            ChanKeychain.set(injected, for: Keys.aiExaAPIKey)
+        } else {
+            aiExaAPIKey = ""
+        }
+
         if let searchKey = ChanKeychain.string(for: Keys.aiSearchAPIKey) {
             aiSearchAPIKey = searchKey
         } else if let injected = Bundle.main.object(forInfoDictionaryKey: "OpenRouterAPIKey") as? String,
@@ -257,6 +280,7 @@ public final class ChanSettings: ObservableObject {
         static let aiSearchModel = "settings.aiSearchModel"
         static let aiSearchAPIKey = "settings.aiSearchAPIKey"
         static let aiSearchEngine = "settings.aiSearchEngine"
+        static let aiExaAPIKey = "settings.aiExaAPIKey"
         static let aiSearchMode = "settings.aiSearchMode"
     }
 }

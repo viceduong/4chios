@@ -26,19 +26,24 @@ public struct AIChatReply: Sendable, Equatable {
     public let usedWebSearch: Bool
     /// Token accounting, when the endpoint reports it.
     public let usage: AIUsage?
+    /// What the searches cost, when the provider reports a price. Exa does, so
+    /// spend is measured rather than estimated.
+    public let searchCostUSD: Double?
 
     public init(
         text: String,
         sources: [AISource] = [],
         model: String,
         usedWebSearch: Bool = false,
-        usage: AIUsage? = nil
+        usage: AIUsage? = nil,
+        searchCostUSD: Double? = nil
     ) {
         self.text = text
         self.sources = sources
         self.model = model
         self.usedWebSearch = usedWebSearch
         self.usage = usage
+        self.searchCostUSD = searchCostUSD
     }
 }
 

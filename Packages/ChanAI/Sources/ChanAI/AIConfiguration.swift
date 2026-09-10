@@ -51,6 +51,9 @@ public struct AIConfiguration: Sendable, Equatable {
     public var temperature: Double
     /// Nil when no search endpoint is configured; search stays unavailable.
     public var search: SearchConfiguration?
+    /// A provider called directly rather than rented through OpenRouter. Takes
+    /// precedence, and reports its own per-call cost.
+    public var directSearch: DirectSearchConfiguration?
 
     public init(
         baseURL: URL = AIConfiguration.generalComputeBaseURL,
@@ -58,7 +61,8 @@ public struct AIConfiguration: Sendable, Equatable {
         model: String = AIConfiguration.generalComputeModel,
         maximumTokens: Int = 1_200,
         temperature: Double = 0.3,
-        search: SearchConfiguration? = nil
+        search: SearchConfiguration? = nil,
+        directSearch: DirectSearchConfiguration? = nil
     ) {
         self.baseURL = baseURL
         self.apiKey = apiKey
@@ -66,6 +70,7 @@ public struct AIConfiguration: Sendable, Equatable {
         self.maximumTokens = maximumTokens
         self.temperature = temperature
         self.search = search
+        self.directSearch = directSearch
     }
 
     public static let generalComputeBaseURL = URL(string: "https://api.generalcompute.com/v1")!
@@ -75,10 +80,39 @@ public struct AIConfiguration: Sendable, Equatable {
     /// Cheap, fast, and reliable with the `web` plugin.
     public static let openRouterSearchModel = "google/gemini-2.5-flash-lite"
 
+    /// A search backend the app calls itself.
+    public struct DirectSearchConfiguration: Sendable, Equatable {
+        public var apiKey: String
+        public var baseURL: URL
+        public var maximumResults: Int
+
+        public init(
+            apiKey: String,
+            baseURL: URL = URL(string: "https://api.exa.ai")!,
+            maximumResults: Int = 8
+        ) {
+            self.apiKey = apiKey
+            self.baseURL = baseURL
+            self.maximumResults = maximumResults
+        }
+
+        public var isConfigured: Bool {
+            !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+
+        public var provider: ExaSearchProvider {
+            ExaSearchProvider(apiKey: apiKey, baseURL: baseURL)
+        }
+    }
+
     /// General Compute's Gemma endpoint.
     public static let generalCompute = AIConfiguration()
 
     public var isConfigured: Bool {
         !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    public var hasAnySearch: Bool {
+        directSearch?.isConfigured == true || search?.isConfigured == true
     }
 }

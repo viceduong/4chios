@@ -51,7 +51,7 @@ public enum AIChatError: Error, Equatable, Sendable {
 /// live information. Text only: summaries and follow-ups are built from post
 /// text, so there is no image plumbing to keep working.
 public struct AIChatClient: Sendable {
-    private let transport: ChanTransport
+    let transport: ChanTransport
     public let configuration: AIConfiguration
 
     public init(transport: ChanTransport = URLSessionTransport(), configuration: AIConfiguration) {
@@ -59,9 +59,9 @@ public struct AIChatClient: Sendable {
         self.configuration = configuration
     }
 
-    /// True when a search-capable endpoint is configured.
+    /// True when any search backend is configured, direct or rented.
     public var canSearch: Bool {
-        configuration.search?.isConfigured == true
+        configuration.hasAnySearch
     }
 
     /// Answers a conversation, optionally with live web results.
@@ -142,6 +142,144 @@ public struct AIChatClient: Sendable {
         } catch {
             throw AIChatError.decoding(String(describing: error))
         }
+    }
+
+    // MARK: - Client-side search tool
+
+    /// Answers using search as a client-side tool: the model asks, the app runs
+    /// the search, the model writes the answer.
+    ///
+    /// This keeps one model across summary, chat and search instead of handing
+    /// search turns to a second provider, and the provider's reported cost is
+    /// carried back on the reply.
+    public func completeWithTools(
+        _ messages: [AIChatMessage],
+        provider: SearchProviding,
+        maximumResults: Int,
+        maximumRounds: Int = ToolLoop.maximumRounds
+    ) async throws -> AIChatReply {
+        guard configuration.isConfigured else { throw AIChatError.notConfigured }
+
+        var loop: [ToolLoop.Message] = messages.map { message in
+            switch message.role {
+            case .system: return .system(message.text)
+            case .assistant: return .assistant(text: message.text, toolCalls: [])
+            case .user: return .user(message.text)
+            }
+        }
+
+        var spend = AIUsage.zero
+        var spentAnything = false
+        var collected: [AISource] = []
+        var searchCost: Double?
+        var model = configuration.model
+
+        for _ in 0..<max(1, maximumRounds) {
+            let payload = ToolLoop.Request(
+                model: configuration.model,
+                messages: loop.map(ToolLoop.EncodedMessage.init),
+                maxTokens: configuration.maximumTokens,
+                temperature: configuration.temperature,
+                stream: false,
+                tools: [ToolLoop.functionTool]
+            )
+
+            let response: ChanHTTPResponse
+            do {
+                response = try await transport.send(
+                    ChanHTTPRequest(
+                        url: configuration.baseURL.appendingPathComponent("chat/completions"),
+                        method: "POST",
+                        headers: [
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                            "Authorization": "Bearer \(configuration.apiKey)",
+                        ],
+                        body: try JSONEncoder().encode(payload)
+                    )
+                )
+            } catch let error as ChanError {
+                if case .cancelled = error { throw AIChatError.cancelled }
+                throw AIChatError.transport(error.errorDescription ?? "Request failed.")
+            }
+
+            guard response.isSuccess else {
+                throw AIChatError.http(
+                    status: response.statusCode,
+                    message: String(decoding: response.body.prefix(240), as: UTF8.self)
+                )
+            }
+
+            let decoded: ToolLoop.ResponseBody
+            do {
+                decoded = try JSONDecoder().decode(ToolLoop.ResponseBody.self, from: response.body)
+            } catch {
+                throw AIChatError.decoding(String(describing: error))
+            }
+
+            guard let round = decoded.round else {
+                throw AIChatError.decoding("The response contained no choices.")
+            }
+
+            if let usage = round.usage {
+                spend += usage
+                spentAnything = true
+            }
+            if let reported = decoded.model { model = reported }
+            collected.append(contentsOf: round.annotations)
+
+            guard !round.toolCalls.isEmpty else {
+                let text = round.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !text.isEmpty else {
+                    throw AIChatError.decoding("The model stopped without answering.")
+                }
+                return AIChatReply(
+                    text: text,
+                    sources: Self.deduplicated(collected),
+                    model: model,
+                    usedWebSearch: searchCost != nil || !collected.isEmpty,
+                    usage: spentAnything ? spend : nil,
+                    searchCostUSD: searchCost
+                )
+            }
+
+            loop.append(.assistant(text: round.text ?? "", toolCalls: round.toolCalls))
+
+            for call in round.toolCalls {
+                try Task.checkCancellation()
+
+                guard let query = call.query else {
+                    loop.append(.tool(id: call.id, name: call.name, content: #"{"error":"no query supplied"}"#))
+                    continue
+                }
+
+                do {
+                    let found = try await provider.search(query, limit: maximumResults)
+                    searchCost = (searchCost ?? 0) + (found.costUSD ?? ExaSearchProvider.listRatePerRequest)
+                    collected.append(
+                        contentsOf: found.results.map { AISource(title: $0.title, url: $0.url) }
+                    )
+                    loop.append(.tool(id: call.id, name: call.name, content: found.toolPayload))
+                } catch let error as SearchError {
+                    loop.append(
+                        .tool(id: call.id, name: call.name, content: #"{"error":"\#(error.userMessage)"}"#)
+                    )
+                }
+            }
+        }
+
+        throw AIChatError.decoding("The model kept asking for searches without answering.")
+    }
+
+    /// Keeps the first occurrence of each URL and caps the list.
+    static func deduplicated(_ sources: [AISource], limit: Int = 12) -> [AISource] {
+        var seen = Set<String>()
+        var result: [AISource] = []
+        for source in sources where seen.insert(source.url).inserted {
+            result.append(source)
+            if result.count == limit { break }
+        }
+        return result
     }
 
     // MARK: - Encoding

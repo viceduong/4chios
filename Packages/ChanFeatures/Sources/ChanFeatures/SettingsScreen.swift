@@ -85,6 +85,21 @@ public struct SettingsScreen: View {
                 }
 
                 Section("Web search") {
+                    SecureField("Exa API key (preferred)", text: $settings.aiExaAPIKey)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    Label(
+                        settings.hasDirectSearch
+                            ? "Searching directly through Exa"
+                            : "Add an Exa key to use their free monthly allowance",
+                        systemImage: settings.hasDirectSearch ? "checkmark.seal.fill" : "key"
+                    )
+                    .font(.caption)
+                    .foregroundColor(settings.hasDirectSearch ? theme.accent : theme.secondaryText)
+                    Text("Called directly, so searches bill against Exa's own free tier rather than a reseller. Takes precedence over OpenRouter when set.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+
                     SecureField("OpenRouter API key", text: $settings.aiSearchAPIKey)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
@@ -162,9 +177,18 @@ public struct SettingsScreen: View {
                             .foregroundColor(theme.secondaryText)
                     }
 
-                    if settings.canSearchTheWeb {
+                    if settings.hasDirectSearch {
                         HStack {
-                            Text("Search balance")
+                            Text("Search spend")
+                            Spacer()
+                            Text(AIPricing.format(usage.measuredSearchSpend))
+                                .foregroundColor(theme.secondaryText)
+                        }
+                    }
+
+                    if !settings.hasDirectSearch, settings.canSearchTheWeb {
+                        HStack {
+                            Text("OpenRouter balance")
                             Spacer()
                             if usage.isLoadingBalance {
                                 ProgressView()
