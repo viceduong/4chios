@@ -190,11 +190,6 @@ public final class ThreadViewController: UIViewController {
         reconfigure(number)
     }
 
-    /// Scrolls to a post from outside the controller (e.g. a summary citation).
-    public func scrollToPost(_ number: PostNumber) {
-        navigate(to: number, from: nil)
-    }
-
     /// Jumps to `number`, remembering `source` so the relevant quote link inside
     /// the destination can be highlighted.
     private func navigate(to number: PostNumber, from source: PostNumber?) {

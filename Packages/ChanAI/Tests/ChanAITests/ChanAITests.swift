@@ -211,23 +211,29 @@ final class ThreadSummarizerTests: XCTestCase {
         }
     }
 
-    func testSinglePassSummaryKeepsOnlyRealCitations() async throws {
+    func testSinglePassSummaryReturnsProse() async throws {
         let (summarizer, transport) = summarizer([
-            completionResponse("The thread argues about beans. See >>2 and >>9999. Also >>1."),
+            completionResponse("The thread argues about beans."),
         ])
 
-        let summary = try await summarizer.summarize(
-            board: "g",
-            op: 1,
-            posts: thread(5)
-        )
+        let summary = try await summarizer.summarize(board: "g", op: 1, posts: thread(5))
 
         XCTAssertEqual(transport.requests.count, 1, "a short thread must be a single request")
         XCTAssertEqual(summary.postCount, 5)
-        XCTAssertEqual(summary.chunkCount, 1)
         XCTAssertEqual(summary.model, "gemma-4-31B-it")
-        // >>9999 does not exist, so it is dropped.
-        XCTAssertEqual(summary.citedPosts, [PostNumber(2), PostNumber(1)])
+        XCTAssertEqual(summary.text, "The thread argues about beans.")
+    }
+
+    func testPromptForbidsCitations() async throws {
+        let (summarizer, transport) = summarizer([completionResponse("ok")])
+        _ = try await summarizer.summarize(board: "g", op: 1, posts: thread(3))
+
+        let messages = try XCTUnwrap(decodeBody(try XCTUnwrap(transport.requests.first))["messages"] as? [[String: Any]])
+        let system = try XCTUnwrap(messages.first?["content"] as? String)
+        let prompt = try XCTUnwrap(messages.last?["content"] as? String)
+
+        XCTAssertTrue(system.contains("Do not cite post numbers"))
+        XCTAssertFalse(prompt.contains("Cite posts"), "the user prompt must not ask for citations")
     }
 
     func testLongThreadIsMapReducedInOrder() async throws {
@@ -249,7 +255,6 @@ final class ThreadSummarizerTests: XCTestCase {
         let summary = try await summarizer.summarize(board: "g", op: 1, posts: posts)
 
         XCTAssertEqual(transport.requests.count, expectedChunks + 1, "one request per chunk plus the reduce pass")
-        XCTAssertEqual(summary.chunkCount, expectedChunks)
         XCTAssertEqual(summary.text, "merged >>2 and >>1")
 
         let lastBody = decodeBody(try XCTUnwrap(transport.requests.last))
@@ -263,7 +268,7 @@ final class ThreadSummarizerTests: XCTestCase {
         let (summarizer, _) = summarizer([completionResponse("ok")])
         let recorder = StatusRecorder()
         _ = try await summarizer.summarize(board: "g", op: 1, posts: thread(3)) { recorder.append($0) }
-        XCTAssertTrue(recorder.values.contains { $0.contains("Reading 3 posts") })
+        XCTAssertEqual(recorder.values, ["Summarizing…"], "phases must not expose the map-reduce seams")
     }
 
     func testEmptyThreadIsRejectedLocally() async {

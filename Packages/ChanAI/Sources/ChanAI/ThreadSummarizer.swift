@@ -39,11 +39,7 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
     public let op: PostNumber
     public let model: String
     public let text: String
-    /// Post numbers the summary cites as `>>N`, filtered to posts that exist.
-    public let citedPosts: [PostNumber]
     public let postCount: Int
-    /// 1 means it fit in a single request; more means a map-reduce pass ran.
-    public let chunkCount: Int
     public let generatedAt: Date
 
     public init(
@@ -51,18 +47,14 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
         op: PostNumber,
         model: String,
         text: String,
-        citedPosts: [PostNumber],
         postCount: Int,
-        chunkCount: Int,
         generatedAt: Date
     ) {
         self.board = board
         self.op = op
         self.model = model
         self.text = text
-        self.citedPosts = citedPosts
         self.postCount = postCount
-        self.chunkCount = chunkCount
         self.generatedAt = generatedAt
     }
 }
@@ -119,12 +111,11 @@ public struct ThreadSummarizer: Sendable {
         let ordered = posts.sorted { $0.no < $1.no }
         let chunks = ThreadTranscript.chunks(ordered, characterLimit: options.chunkCharacterLimit)
 
-        onStatus?("Reading \(ordered.count) posts…")
+        onStatus?("Summarizing…")
         try Task.checkCancellation()
 
         let text: String
         if chunks.count == 1 {
-            onStatus?("Summarizing…")
             text = try await client.complete([
                 Self.systemMessage,
                 AIChatMessage(
@@ -136,7 +127,6 @@ public struct ThreadSummarizer: Sendable {
             var partials: [String] = []
             for (index, chunk) in chunks.enumerated() {
                 try Task.checkCancellation()
-                onStatus?("Summarizing part \(index + 1) of \(chunks.count)…")
                 partials.append(
                     try await client.complete([
                         Self.systemMessage,
@@ -153,22 +143,18 @@ public struct ThreadSummarizer: Sendable {
             }
 
             try Task.checkCancellation()
-            onStatus?("Combining \(chunks.count) summaries…")
             text = try await client.complete([
                 Self.systemMessage,
                 AIChatMessage(role: .user, text: reducePrompt(partials: partials)),
             ])
         }
 
-        let known = Set(ordered.map(\.no))
         return ThreadSummary(
             board: board,
             op: op,
             model: client.configuration.model,
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
-            citedPosts: Self.citations(in: text).filter { known.contains($0) },
             postCount: ordered.count,
-            chunkCount: chunks.count,
             generatedAt: Date()
         )
     }
@@ -181,7 +167,7 @@ public struct ThreadSummarizer: Sendable {
         You summarize anonymous imageboard threads for a reader who has not opened them.
         Rules:
         - Use only what the transcript states. Never invent facts, quotes, names, dates or numbers.
-        - Cite the post each point comes from as >>N.
+        - Do not cite post numbers. Write plain prose with no >> references.
         - Posters are anonymous; report their claims as claims, not as facts.
         - Be concise and neutral. No filler, no disclaimers, no moralising.
         - Write in plain text. Do not use headings or bullet characters other than "-".
@@ -195,8 +181,6 @@ public struct ThreadSummarizer: Sendable {
         Cover: the topic; the main points and who makes them; any disagreement; \
         notable media mentioned; and where the thread stands now.
 
-        Cite posts as >>N.
-
         <thread>
         \(transcript)
         </thread>
@@ -206,7 +190,7 @@ public struct ThreadSummarizer: Sendable {
     private func chunkPrompt(transcript: String, index: Int, total: Int) -> String {
         """
         This is part \(index) of \(total) of one thread, in chronological order.
-        Summarize what is discussed in this part in at most 6 bullets, citing posts as >>N.
+        Summarize what is discussed in this part in at most 6 bullets.
         Ignore anything that only makes sense with later parts.
 
         <thread-part>
@@ -218,7 +202,7 @@ public struct ThreadSummarizer: Sendable {
     private func reducePrompt(partials: [String]) -> String {
         var prompt = """
         Below are summaries of consecutive parts of a single thread, in order.
-        Merge them into one summary in \(options.style.instruction), keeping the >>N citations.
+        Merge them into one summary in \(options.style.instruction).
         Remove repetition. Keep the strongest points and any unresolved disagreement.
 
         """
@@ -226,27 +210,5 @@ public struct ThreadSummarizer: Sendable {
             prompt += "<part-\(index + 1)>\n\(partial)\n</part-\(index + 1)>\n\n"
         }
         return prompt
-    }
-
-    // MARK: - Citations
-
-    /// Extracts `>>N` citations in first-appearance order.
-    public static func citations(in text: String) -> [PostNumber] {
-        guard let regex = try? NSRegularExpression(pattern: ">>\\s*(\\d+)") else { return [] }
-
-        let subject = text as NSString
-        var seen = Set<PostNumber>()
-        var result: [PostNumber] = []
-
-        for match in regex.matches(in: text, range: NSRange(location: 0, length: subject.length)) {
-            guard match.numberOfRanges > 1,
-                  let value = Int(subject.substring(with: match.range(at: 1))),
-                  value > 0 else { continue }
-            let number = PostNumber(value)
-            if seen.insert(number).inserted {
-                result.append(number)
-            }
-        }
-        return result
     }
 }

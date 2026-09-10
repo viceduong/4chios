@@ -32,7 +32,6 @@ struct ThreadCollectionView: UIViewControllerRepresentable {
     @ObservedObject var store: ThreadStore
     let theme: ChanTheme
     let fontSize: CGFloat
-    @Binding var jumpTo: PostNumber?
     let onOpenMedia: (Post) -> Void
 
     func makeUIViewController(context: Context) -> ThreadViewController {
@@ -46,12 +45,6 @@ struct ThreadCollectionView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ThreadViewController, context: Context) {
         controller.applyTheme(theme, fontSize: fontSize)
-
-        if let target = jumpTo {
-            controller.scrollToPost(target)
-            // Deferred: never mutate SwiftUI state during an update pass.
-            DispatchQueue.main.async { jumpTo = nil }
-        }
     }
 }
 
@@ -146,7 +139,6 @@ public struct ThreadScreen: View {
     @State private var mediaPost: Post?
     @State private var showComposer = false
     @State private var showSummary = false
-    @State private var jumpTo: PostNumber?
 
     public init(board: BoardID, op: PostNumber) {
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
@@ -160,7 +152,6 @@ public struct ThreadScreen: View {
             store: store,
             theme: theme,
             fontSize: settings.fontSize,
-            jumpTo: $jumpTo,
             onOpenMedia: { mediaPost = $0 }
         )
         .navigationTitle("#\(store.op.value)")
@@ -200,11 +191,8 @@ public struct ThreadScreen: View {
                 .environment(\.chanTheme, theme)
         }
         .sheet(isPresented: $showSummary, onDismiss: { summaryStore.cancel() }) {
-            ThreadSummaryScreen(store: summaryStore, posts: store.posts) { number in
-                showSummary = false
-                jumpTo = number
-            }
-            .environment(\.chanTheme, theme)
+            ThreadSummaryScreen(store: summaryStore, posts: store.posts)
+                .environment(\.chanTheme, theme)
         }
         .task {
             await store.loadIfNeeded()

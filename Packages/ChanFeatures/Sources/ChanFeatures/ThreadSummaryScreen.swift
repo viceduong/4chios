@@ -3,7 +3,7 @@ import ChanCore
 import ChanUI
 import SwiftUI
 
-/// The AI summary of a thread, with tappable citations back into the timeline.
+/// The AI summary of a thread.
 ///
 /// One tap on the toolbar button is all it takes: this screen opens already
 /// summarizing, shows a cached summary instantly when it has one, and keeps the
@@ -11,15 +11,13 @@ import SwiftUI
 public struct ThreadSummaryScreen: View {
     @ObservedObject private var store: ThreadSummaryStore
     private let posts: [Post]
-    private let onJump: (PostNumber) -> Void
 
     @Environment(\.chanTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
-    public init(store: ThreadSummaryStore, posts: [Post], onJump: @escaping (PostNumber) -> Void) {
+    public init(store: ThreadSummaryStore, posts: [Post]) {
         self.store = store
         self.posts = posts
-        self.onJump = onJump
     }
 
     public var body: some View {
@@ -27,10 +25,6 @@ public struct ThreadSummaryScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ChanSpacing.l) {
                     content
-
-                    if let summary = store.summary, !summary.citedPosts.isEmpty {
-                        citations(summary.citedPosts)
-                    }
 
                     if let summary = store.summary {
                         footer(summary)
@@ -113,20 +107,16 @@ public struct ThreadSummaryScreen: View {
             EmptyView()
 
         case let .working(status):
-            VStack(alignment: .leading, spacing: ChanSpacing.s) {
+            VStack(alignment: .leading, spacing: ChanSpacing.m) {
                 HStack(spacing: ChanSpacing.m) {
                     ProgressView().tint(theme.accent)
                     Text(status)
                         .font(.subheadline)
                         .foregroundColor(theme.primaryText)
                 }
-                // Show the cached summary underneath while a refresh runs.
                 if let summary = store.summary {
+                    // Keep the previous summary readable while it refreshes.
                     summaryText(summary.text).opacity(0.5)
-                } else {
-                    Text("A long thread is summarized in parts, so this can take a minute.")
-                        .font(.caption2)
-                        .foregroundColor(theme.tertiaryText)
                 }
             }
 
@@ -162,37 +152,10 @@ public struct ThreadSummaryScreen: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func citations(_ numbers: [PostNumber]) -> some View {
-        VStack(alignment: .leading, spacing: ChanSpacing.s) {
-            Text("CITED POSTS")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(theme.tertiaryText)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(numbers, id: \.self) { number in
-                        Button {
-                            ChanHaptics.tap()
-                            onJump(number)
-                        } label: {
-                            Text(">>\(number.value)")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                .foregroundColor(theme.accent)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(theme.elevated)
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private func footer(_ summary: ThreadSummary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Divider().padding(.vertical, 4)
-            Text("\(summary.model)  ·  \(summary.postCount) posts  ·  \(summary.chunkCount) request\(summary.chunkCount == 1 ? "" : "s")")
+            Text("\(summary.model)  ·  \(summary.postCount) posts")
                 .font(.caption2)
                 .foregroundColor(theme.tertiaryText)
             Text("Generated \(ChanFormat.relative(summary.generatedAt)). Only post text is sent; images and videos are never uploaded.")
