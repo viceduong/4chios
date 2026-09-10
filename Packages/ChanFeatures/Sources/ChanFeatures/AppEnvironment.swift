@@ -14,19 +14,22 @@ public final class AppEnvironment: ObservableObject {
     public let poster: ChanPoster
     public let database: ChanDatabase
     public let settings: ChanSettings
+    public let usage: AIUsageStore
 
     public init(
         rateLimiter: ChanRateLimiter,
         client: ChanClient,
         poster: ChanPoster,
         database: ChanDatabase,
-        settings: ChanSettings
+        settings: ChanSettings,
+        usage: AIUsageStore = AIUsageStore()
     ) {
         self.rateLimiter = rateLimiter
         self.client = client
         self.poster = poster
         self.database = database
         self.settings = settings
+        self.usage = usage
     }
 
     /// Production wiring: one shared 1 req/s limiter, on-disk database, persisted settings.

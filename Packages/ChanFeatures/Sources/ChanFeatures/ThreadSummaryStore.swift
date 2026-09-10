@@ -100,6 +100,7 @@ public final class ThreadSummaryStore: ObservableObject {
                 self.isStale = false
                 self.phase = .ready
                 self.persist(result)
+                self.environment.usage.record(result.usage, model: result.model)
             } catch let error as AIChatError {
                 self.phase = .failed(error.userMessage)
             } catch {

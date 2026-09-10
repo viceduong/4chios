@@ -15,6 +15,10 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
     public let sources: [AISource]
     public let usedWebSearch: Bool
     public let date: Date
+    /// Tokens this turn cost, when the endpoint reported them.
+    public let usage: AIUsage?
+    /// The model that answered; search turns use a different one than plain ones.
+    public let model: String
 
     public init(
         id: UUID = UUID(),
@@ -22,7 +26,9 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
         text: String,
         sources: [AISource] = [],
         usedWebSearch: Bool = false,
-        date: Date = Date()
+        date: Date = Date(),
+        usage: AIUsage? = nil,
+        model: String = ""
     ) {
         self.id = id
         self.role = role
@@ -30,6 +36,8 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
         self.sources = sources
         self.usedWebSearch = usedWebSearch
         self.date = date
+        self.usage = usage
+        self.model = model
     }
 
     public static func user(_ text: String) -> ChatTurn {
@@ -106,7 +114,9 @@ public struct ThreadChatSession: Sendable {
             role: .assistant,
             text: reply.text,
             sources: reply.sources,
-            usedWebSearch: usedSearch
+            usedWebSearch: usedSearch,
+            usage: reply.usage,
+            model: reply.model
         )
     }
 

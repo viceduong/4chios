@@ -1,3 +1,4 @@
+import ChanAI
 import ChanCore
 import ChanMedia
 import ChanUI
@@ -5,6 +6,7 @@ import SwiftUI
 
 public struct SettingsScreen: View {
     @ObservedObject var settings: ChanSettings
+    @ObservedObject private var usage = AppEnvironment.shared.usage
 
     @Environment(\.chanTheme) private var theme
     @Environment(\.dismiss) private var dismiss
@@ -105,6 +107,58 @@ public struct SettingsScreen: View {
                     Text("When you ask a follow-up that needs current information, the question and the thread's text are sent to this endpoint, which searches the web and returns cited results.")
                         .font(.caption2)
                         .foregroundColor(theme.secondaryText)
+                }
+
+                Section("AI usage") {
+                    HStack {
+                        Text("Tokens used")
+                        Spacer()
+                        Text(usage.formattedTotalTokens)
+                            .foregroundColor(theme.secondaryText)
+                    }
+                    HStack {
+                        Text("Requests")
+                        Spacer()
+                        Text("\(usage.snapshot.requests)")
+                            .foregroundColor(theme.secondaryText)
+                    }
+                    if let spend = usage.estimatedSpend {
+                        HStack {
+                            Text("Estimated spend")
+                            Spacer()
+                            Text(AIPricing.format(spend))
+                                .foregroundColor(theme.secondaryText)
+                        }
+                    }
+                    if let last = usage.snapshot.lastUsedAt {
+                        HStack {
+                            Text("Last used")
+                            Spacer()
+                            Text(ChanFormat.relative(last))
+                                .foregroundColor(theme.secondaryText)
+                        }
+                    }
+                    if usage.hasUnpricedUsage {
+                        Text("General Compute does not publish a price for every model, so no dollar estimate is shown for those tokens.")
+                            .font(.caption2)
+                            .foregroundColor(theme.secondaryText)
+                    }
+
+                    Link(destination: URL(string: "https://app.generalcompute.com")!) {
+                        Label("Check your credit balance", systemImage: "arrow.up.right.square")
+                    }
+
+                    Text("The General Compute API has no billing endpoint, so a credit balance cannot be fetched. These figures are usage tracked on this device; the dashboard shows the real balance.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+
+                    if usage.snapshot.requests > 0 {
+                        Button(role: .destructive) {
+                            usage.reset()
+                        } label: {
+                            Text("Reset usage counters")
+                        }
+                    }
                 }
 
                 Section("Filters") {

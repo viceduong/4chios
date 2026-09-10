@@ -41,6 +41,9 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
     public let text: String
     public let postCount: Int
     public let generatedAt: Date
+    /// Tokens used across every request the summary needed. Optional so older
+    /// cached summaries still decode.
+    public let usage: AIUsage?
 
     public init(
         board: BoardID,
@@ -48,7 +51,8 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
         model: String,
         text: String,
         postCount: Int,
-        generatedAt: Date
+        generatedAt: Date,
+        usage: AIUsage? = nil
     ) {
         self.board = board
         self.op = op
@@ -56,6 +60,7 @@ public struct ThreadSummary: Sendable, Codable, Equatable {
         self.text = text
         self.postCount = postCount
         self.generatedAt = generatedAt
+        self.usage = usage
     }
 }
 
@@ -114,39 +119,51 @@ public struct ThreadSummarizer: Sendable {
         onStatus?("Summarizing…")
         try Task.checkCancellation()
 
+        var spend = AIUsage.zero
+        var spentAnything = false
+        func tally(_ usage: AIUsage?) {
+            guard let usage else { return }
+            spend += usage
+            spentAnything = true
+        }
+
         let text: String
         if chunks.count == 1 {
-            text = try await client.complete([
+            let reply = try await client.complete([
                 Self.systemMessage,
                 AIChatMessage(
                     role: .user,
                     text: singlePassPrompt(transcript: ThreadTranscript.render(chunks[0]))
                 ),
-            ]).text
+            ])
+            tally(reply.usage)
+            text = reply.text
         } else {
             var partials: [String] = []
             for (index, chunk) in chunks.enumerated() {
                 try Task.checkCancellation()
-                partials.append(
-                    try await client.complete([
-                        Self.systemMessage,
-                        AIChatMessage(
-                            role: .user,
-                            text: chunkPrompt(
-                                transcript: ThreadTranscript.render(chunk),
-                                index: index + 1,
-                                total: chunks.count
-                            )
-                        ),
-                    ]).text
-                )
+                let reply = try await client.complete([
+                    Self.systemMessage,
+                    AIChatMessage(
+                        role: .user,
+                        text: chunkPrompt(
+                            transcript: ThreadTranscript.render(chunk),
+                            index: index + 1,
+                            total: chunks.count
+                        )
+                    ),
+                ])
+                tally(reply.usage)
+                partials.append(reply.text)
             }
 
             try Task.checkCancellation()
-            text = try await client.complete([
+            let reply = try await client.complete([
                 Self.systemMessage,
                 AIChatMessage(role: .user, text: reducePrompt(partials: partials)),
-            ]).text
+            ])
+            tally(reply.usage)
+            text = reply.text
         }
 
         return ThreadSummary(
@@ -155,7 +172,8 @@ public struct ThreadSummarizer: Sendable {
             model: client.configuration.model,
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             postCount: ordered.count,
-            generatedAt: Date()
+            generatedAt: Date(),
+            usage: spentAnything ? spend : nil
         )
     }
 

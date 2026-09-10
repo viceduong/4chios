@@ -24,12 +24,21 @@ public struct AIChatReply: Sendable, Equatable {
     public let sources: [AISource]
     public let model: String
     public let usedWebSearch: Bool
+    /// Token accounting, when the endpoint reports it.
+    public let usage: AIUsage?
 
-    public init(text: String, sources: [AISource] = [], model: String, usedWebSearch: Bool = false) {
+    public init(
+        text: String,
+        sources: [AISource] = [],
+        model: String,
+        usedWebSearch: Bool = false,
+        usage: AIUsage? = nil
+    ) {
         self.text = text
         self.sources = sources
         self.model = model
         self.usedWebSearch = usedWebSearch
+        self.usage = usage
     }
 }
 

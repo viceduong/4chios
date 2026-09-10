@@ -129,7 +129,8 @@ public struct AIChatClient: Sendable {
                 text: text,
                 sources: Self.sources(from: choice?.message.annotations ?? []),
                 model: decoded.model ?? model,
-                usedWebSearch: useSearch
+                usedWebSearch: useSearch,
+                usage: decoded.usage?.normalised
             )
         } catch let error as AIChatError {
             throw error
@@ -231,4 +232,30 @@ private struct ChatCompletionResponse: Decodable {
 
     let model: String?
     let choices: [Choice]
+    let usage: Usage?
+
+    /// The endpoint reports latency and throughput alongside the token counts;
+    /// only the counts matter here.
+    struct Usage: Decodable {
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let totalTokens: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case promptTokens = "prompt_tokens"
+            case completionTokens = "completion_tokens"
+            case totalTokens = "total_tokens"
+        }
+
+        var normalised: AIUsage? {
+            let prompt = promptTokens ?? 0
+            let completion = completionTokens ?? 0
+            guard prompt > 0 || completion > 0 else { return nil }
+            return AIUsage(
+                promptTokens: prompt,
+                completionTokens: completion,
+                totalTokens: totalTokens ?? (prompt + completion)
+            )
+        }
+    }
 }
