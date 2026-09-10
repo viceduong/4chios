@@ -19,6 +19,8 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
     public let usage: AIUsage?
     /// The model that answered; search turns use a different one than plain ones.
     public let model: String
+    /// What the searches behind this turn cost, when the provider reports it.
+    public let searchCostUSD: Double?
 
     public init(
         id: UUID = UUID(),
@@ -28,7 +30,8 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
         usedWebSearch: Bool = false,
         date: Date = Date(),
         usage: AIUsage? = nil,
-        model: String = ""
+        model: String = "",
+        searchCostUSD: Double? = nil
     ) {
         self.id = id
         self.role = role
@@ -38,6 +41,7 @@ public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
         self.date = date
         self.usage = usage
         self.model = model
+        self.searchCostUSD = searchCostUSD
     }
 
     public static func user(_ text: String) -> ChatTurn {
@@ -138,7 +142,8 @@ public struct ThreadChatSession: Sendable {
             sources: reply.sources,
             usedWebSearch: usedSearch,
             usage: reply.usage,
-            model: reply.model
+            model: reply.model,
+            searchCostUSD: reply.searchCostUSD
         )
     }
 
