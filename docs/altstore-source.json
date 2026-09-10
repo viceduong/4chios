@@ -20,11 +20,11 @@
       "category": "utilities",
       "versions": [
         {
-          "version": "0.2.2",
-          "buildVersion": "4",
+          "version": "0.2.3",
+          "buildVersion": "5",
           "date": "2026-09-10",
-          "downloadURL": "https://github.com/viceduong/4chios/releases/download/v0.2.2/Ch4ios.ipa",
-          "size": 52701794,
+          "downloadURL": "https://github.com/viceduong/4chios/releases/download/v0.2.3/Ch4ios.ipa",
+          "size": 52760318,
           "minOSVersion": "15.0"
         }
       ],
