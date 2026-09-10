@@ -85,7 +85,7 @@ public struct ChanFilterEngine: Sendable {
         guard !compiled.isEmpty else { return [] }
 
         var cache = Cache()
-        var matches: [Match] = []
+        var hits: [Match] = []
 
         for entry in compiled {
             guard entry.isValid else { continue }
@@ -94,12 +94,12 @@ public struct ChanFilterEngine: Sendable {
             for field in entry.filter.fields {
                 guard let value = value(for: field, post: post, cache: &cache) else { continue }
                 guard matches(entry, value: value) else { continue }
-                matches.append(Match(filter: entry.filter, field: field))
+                hits.append(Match(filter: entry.filter, field: field))
                 break
             }
         }
 
-        return matches
+        return hits
     }
 
     public func decision(for post: Post, in context: ChanFilterContext) -> ChanFilterDecision {
