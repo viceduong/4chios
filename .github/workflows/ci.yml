@@ -68,34 +68,27 @@ jobs:
       # Summaries work out of the box only if the repository defines
       # GENERALCOMPUTE_API_KEY. Without it the app asks for a key in Settings,
       # which keeps credentials out of the repository entirely.
-      - name: Inject AI key (optional)
+      - name: Inject AI keys (optional)
         env:
           GC_KEY: ${{ secrets.GENERALCOMPUTE_API_KEY }}
+          OR_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          if [ -z "$GC_KEY" ]; then
-            echo "No GENERALCOMPUTE_API_KEY secret; the app will ask for one in Settings."
-            exit 0
-          fi
           python3 - <<'PYEOF'
           import os, plistlib
           path = "App/Info.plist"
           with open(path, "rb") as handle:
               info = plistlib.load(handle)
-          info["GeneralComputeAPIKey"] = os.environ["GC_KEY"]
+          injected = []
+          if os.environ.get("GC_KEY"):
+              info["GeneralComputeAPIKey"] = os.environ["GC_KEY"]
+              injected.append("generalcompute")
+          if os.environ.get("OR_KEY"):
+              info["OpenRouterAPIKey"] = os.environ["OR_KEY"]
+              injected.append("openrouter")
           with open(path, "wb") as handle:
               plistlib.dump(info, handle)
-          print("Injected GeneralComputeAPIKey into", path)
+          print("injected:", ", ".join(injected) or "none (the app asks in Settings)")
           PYEOF
-
-      - name: Cache SwiftPM checkouts and binary artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/org.swift.swiftpm
-            build/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('Packages/*/Package.swift') }}
-          restore-keys: |
-            spm-${{ runner.os }}-
 
       - name: Test packages (SwiftPM, macOS)
         run: |

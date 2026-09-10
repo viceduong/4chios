@@ -108,15 +108,40 @@ public final class ChanSettings: ObservableObject {
         didSet { ChanKeychain.set(aiAPIKey, for: Keys.aiAPIKey) }
     }
 
+    /// Search-capable endpoint used when a question needs live results.
+    @Published public var aiSearchEndpoint: String {
+        didSet { save() }
+    }
+
+    @Published public var aiSearchModel: String {
+        didSet { save() }
+    }
+
+    @Published public var aiSearchAPIKey: String {
+        didSet { ChanKeychain.set(aiSearchAPIKey, for: Keys.aiSearchAPIKey) }
+    }
+
     public var isAIConfigured: Bool {
         !aiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// True when a search endpoint is configured, so the web toggle can be offered.
+    public var canSearchTheWeb: Bool {
+        !aiSearchAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     public var aiConfiguration: AIConfiguration {
         AIConfiguration(
             baseURL: URL(string: aiEndpoint) ?? AIConfiguration.generalComputeBaseURL,
             apiKey: aiAPIKey,
-            model: aiModel.isEmpty ? AIConfiguration.generalComputeModel : aiModel
+            model: aiModel.isEmpty ? AIConfiguration.generalComputeModel : aiModel,
+            search: canSearchTheWeb
+                ? AIConfiguration.SearchConfiguration(
+                    baseURL: URL(string: aiSearchEndpoint) ?? AIConfiguration.openRouterBaseURL,
+                    apiKey: aiSearchAPIKey,
+                    model: aiSearchModel.isEmpty ? AIConfiguration.openRouterSearchModel : aiSearchModel
+                )
+                : nil
         )
     }
 
@@ -135,9 +160,22 @@ public final class ChanSettings: ObservableObject {
         aiEndpoint = defaults.string(forKey: Keys.aiEndpoint)
             ?? AIConfiguration.generalComputeBaseURL.absoluteString
         aiModel = defaults.string(forKey: Keys.aiModel) ?? AIConfiguration.generalComputeModel
+        aiSearchEndpoint = defaults.string(forKey: Keys.aiSearchEndpoint)
+            ?? AIConfiguration.openRouterBaseURL.absoluteString
+        aiSearchModel = defaults.string(forKey: Keys.aiSearchModel) ?? AIConfiguration.openRouterSearchModel
 
         // A build-time key (from a gitignored xcconfig) seeds the Keychain once,
         // so local builds work without pasting anything. Never committed.
+        if let searchKey = ChanKeychain.string(for: Keys.aiSearchAPIKey) {
+            aiSearchAPIKey = searchKey
+        } else if let injected = Bundle.main.object(forInfoDictionaryKey: "OpenRouterAPIKey") as? String,
+                  !injected.isEmpty {
+            aiSearchAPIKey = injected
+            ChanKeychain.set(injected, for: Keys.aiSearchAPIKey)
+        } else {
+            aiSearchAPIKey = ""
+        }
+
         if let stored = ChanKeychain.string(for: Keys.aiAPIKey) {
             aiAPIKey = stored
         } else if let injected = Bundle.main.object(forInfoDictionaryKey: "GeneralComputeAPIKey") as? String,
@@ -179,6 +217,8 @@ public final class ChanSettings: ObservableObject {
         defaults.set(catalogSort.rawValue, forKey: Keys.catalogSort)
         defaults.set(aiEndpoint, forKey: Keys.aiEndpoint)
         defaults.set(aiModel, forKey: Keys.aiModel)
+        defaults.set(aiSearchEndpoint, forKey: Keys.aiSearchEndpoint)
+        defaults.set(aiSearchModel, forKey: Keys.aiSearchModel)
         // The API key deliberately never reaches UserDefaults.
     }
 
@@ -191,5 +231,8 @@ public final class ChanSettings: ObservableObject {
         static let aiEndpoint = "settings.aiEndpoint"
         static let aiModel = "settings.aiModel"
         static let aiAPIKey = "settings.aiAPIKey"
+        static let aiSearchEndpoint = "settings.aiSearchEndpoint"
+        static let aiSearchModel = "settings.aiSearchModel"
+        static let aiSearchAPIKey = "settings.aiSearchAPIKey"
     }
 }

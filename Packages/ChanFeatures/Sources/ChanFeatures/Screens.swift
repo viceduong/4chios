@@ -153,6 +153,7 @@ public struct CatalogScreen: View {
 public struct ThreadScreen: View {
     @StateObject private var store: ThreadStore
     @StateObject private var summaryStore: ThreadSummaryStore
+    @StateObject private var chatStore: ThreadChatStore
     @ObservedObject private var settings = AppEnvironment.shared.settings
     @Environment(\.chanTheme) private var theme
     @State private var mediaPost: Post?
@@ -163,6 +164,9 @@ public struct ThreadScreen: View {
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
         _summaryStore = StateObject(
             wrappedValue: ThreadSummaryStore(board: board, op: op, environment: .shared)
+        )
+        _chatStore = StateObject(
+            wrappedValue: ThreadChatStore(board: board, op: op, environment: .shared)
         )
     }
 
@@ -209,8 +213,11 @@ public struct ThreadScreen: View {
             ComposerScreen(board: store.board, thread: store.op)
                 .environment(\.chanTheme, theme)
         }
-        .sheet(isPresented: $showSummary, onDismiss: { summaryStore.cancel() }) {
-            ThreadSummaryScreen(store: summaryStore, posts: store.posts)
+        .sheet(isPresented: $showSummary, onDismiss: {
+            summaryStore.cancel()
+            chatStore.cancel()
+        }) {
+            ThreadSummaryScreen(store: summaryStore, chat: chatStore, posts: store.posts)
                 .environment(\.chanTheme, theme)
         }
         .task {

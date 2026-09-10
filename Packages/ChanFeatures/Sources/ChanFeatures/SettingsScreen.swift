@@ -82,6 +82,31 @@ public struct SettingsScreen: View {
                         .foregroundColor(theme.secondaryText)
                 }
 
+                Section("Web search") {
+                    SecureField("OpenRouter API key", text: $settings.aiSearchAPIKey)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    TextField("Model", text: $settings.aiSearchModel)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .font(.system(.footnote, design: .monospaced))
+                    TextField("Endpoint", text: $settings.aiSearchEndpoint)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .font(.system(.footnote, design: .monospaced))
+
+                    Label(
+                        settings.canSearchTheWeb ? "Chat can search the web" : "Add a key to let chat search the web",
+                        systemImage: settings.canSearchTheWeb ? "globe" : "key"
+                    )
+                    .font(.caption)
+                    .foregroundColor(settings.canSearchTheWeb ? theme.accent : theme.secondaryText)
+
+                    Text("When you ask a follow-up that needs current information, the question and the thread's text are sent to this endpoint, which searches the web and returns cited results.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+                }
+
                 Section("Filters") {
                     NavigationLink(destination: FiltersScreen()) {
                         Label("Content filters", systemImage: "line.3.horizontal.decrease.circle")

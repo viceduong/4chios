@@ -122,7 +122,7 @@ public struct ThreadSummarizer: Sendable {
                     role: .user,
                     text: singlePassPrompt(transcript: ThreadTranscript.render(chunks[0]))
                 ),
-            ])
+            ]).text
         } else {
             var partials: [String] = []
             for (index, chunk) in chunks.enumerated() {
@@ -138,7 +138,7 @@ public struct ThreadSummarizer: Sendable {
                                 total: chunks.count
                             )
                         ),
-                    ])
+                    ]).text
                 )
             }
 
@@ -146,7 +146,7 @@ public struct ThreadSummarizer: Sendable {
             text = try await client.complete([
                 Self.systemMessage,
                 AIChatMessage(role: .user, text: reducePrompt(partials: partials)),
-            ])
+            ]).text
         }
 
         return ThreadSummary(

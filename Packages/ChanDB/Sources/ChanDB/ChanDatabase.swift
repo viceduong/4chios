@@ -196,6 +196,18 @@ public final class ChanDatabase: @unchecked Sendable {
             }
         }
 
+        // v5: the conversation about a thread, so reopening a summary resumes
+        // where the reader left off.
+        migrator.registerMigration("v5") { db in
+            try db.create(table: "thread_chat") { table in
+                table.column("board_id", .text).notNull()
+                table.column("op_no", .integer).notNull()
+                table.column("updated_at", .double).notNull()
+                table.column("json", .text).notNull()
+                table.primaryKey(["board_id", "op_no"])
+            }
+        }
+
         return migrator
     }
     // MARK: - JSON codec

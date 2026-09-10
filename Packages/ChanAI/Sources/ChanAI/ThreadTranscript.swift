@@ -51,6 +51,35 @@ public enum ThreadTranscript {
         return rendered
     }
 
+    /// A budgeted view of the thread: the OP, then as much of the tail as fits.
+    ///
+    /// Follow-up questions are almost always about what was just said, so the
+    /// tail is kept and the omission is stated rather than quietly dropped.
+    public static func context(_ posts: [Post], characterLimit: Int) -> String {
+        let full = render(posts)
+        guard full.count > characterLimit, let first = posts.first else { return full }
+
+        var tail: [Post] = []
+        var size = render(first).count
+
+        for post in posts.dropFirst().reversed() {
+            let length = render(post).count + 2
+            if size + length > characterLimit { break }
+            tail.insert(post, at: 0)
+            size += length
+        }
+
+        let omitted = posts.count - 1 - tail.count
+        let marker = omitted > 0 ? "
+
+[\(omitted) earlier posts omitted]
+
+" : "
+
+"
+        return render(first) + marker + render(tail)
+    }
+
     /// Splits a thread into chunks that each fit a request.
     public static func chunks(
         _ posts: [Post],

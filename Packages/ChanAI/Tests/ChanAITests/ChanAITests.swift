@@ -132,7 +132,9 @@ final class AIChatClientTests: XCTestCase {
     func testEncodesOpenAICompatibleRequest() async throws {
         let (chat, transport) = client([completionResponse("hello")])
         let reply = try await chat.complete([AIChatMessage(role: .user, text: "hi")])
-        XCTAssertEqual(reply, "hello")
+        XCTAssertEqual(reply.text, "hello")
+        XCTAssertFalse(reply.usedWebSearch)
+        XCTAssertTrue(reply.sources.isEmpty)
 
         let request = try XCTUnwrap(transport.requests.first)
         XCTAssertEqual(request.url.absoluteString, "https://api.generalcompute.com/v1/chat/completions")
