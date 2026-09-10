@@ -23,7 +23,7 @@ final class AppInfoTests: XCTestCase {
 @MainActor
 final class ModuleGraphTests: XCTestCase {
     func testCoreIsLinked() {
-        XCTAssertEqual(ChanVersion.current, "0.1.0")
+        XCTAssertEqual(ChanVersion.current, "0.2.0")
         XCTAssertEqual(ChanVersion.schemaVersion, 4)
     }
 
