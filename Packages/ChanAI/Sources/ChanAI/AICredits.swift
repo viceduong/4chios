@@ -1,4 +1,5 @@
 import ChanAPI
+import ChanCore
 import Foundation
 
 /// Account credit for a provider that exposes it.
