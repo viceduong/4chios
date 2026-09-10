@@ -59,7 +59,7 @@ public enum SearchIntent {
         "no access to current", "no real-time",
         // The thread does not answer it.
         "does not contain", "doesn't contain", "does not say", "doesn't say",
-        "not mentioned in the thread", "not in the thread, "no information about",
+        "not mentioned in the thread", "not in the thread", "no information about",
         "cannot be determined from the thread", "isn't mentioned",
     ]
 
