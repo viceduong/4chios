@@ -28,6 +28,12 @@ public final class AIUsageStore: ObservableObject {
 
     @Published public private(set) var snapshot: Snapshot
 
+    /// Live balance for the search endpoint. OpenRouter exposes one; General
+    /// Compute does not.
+    @Published public private(set) var searchBalance: AICredits?
+    @Published public private(set) var balanceError: String?
+    @Published public private(set) var isLoadingBalance = false
+
     private let defaults: UserDefaults
     private static let storageKey = "ai.usage.snapshot"
 
@@ -60,6 +66,32 @@ public final class AIUsageStore: ObservableObject {
         snapshot.byModel[key] = totals
 
         persist()
+    }
+
+    /// Reads the search endpoint's credit balance, if it publishes one.
+    public func refreshSearchBalance(endpoint: String, apiKey: String) async {
+        guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else {
+            searchBalance = nil
+            balanceError = nil
+            return
+        }
+
+        isLoadingBalance = true
+        defer { isLoadingBalance = false }
+
+        do {
+            searchBalance = try await AICreditsClient().credits(
+                baseURL: URL(string: endpoint) ?? AIConfiguration.openRouterBaseURL,
+                apiKey: apiKey
+            )
+            balanceError = nil
+        } catch let error as AIChatError {
+            balanceError = error.userMessage
+            searchBalance = nil
+        } catch {
+            balanceError = error.localizedDescription
+            searchBalance = nil
+        }
     }
 
     public func reset() {

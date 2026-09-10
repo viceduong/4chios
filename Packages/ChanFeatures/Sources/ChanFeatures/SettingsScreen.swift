@@ -144,6 +144,32 @@ public struct SettingsScreen: View {
                             .foregroundColor(theme.secondaryText)
                     }
 
+                    if settings.canSearchTheWeb {
+                        HStack {
+                            Text("Search balance")
+                            Spacer()
+                            if usage.isLoadingBalance {
+                                ProgressView()
+                            } else if let balance = usage.searchBalance {
+                                Text(balance.formattedRemaining)
+                                    .foregroundColor(balance.isOverdrawn ? theme.danger : theme.secondaryText)
+                            } else {
+                                Text("unavailable").foregroundColor(theme.tertiaryText)
+                            }
+                        }
+
+                        if let balance = usage.searchBalance, balance.isOverdrawn {
+                            Text("This balance is spent. Search endpoints often keep serving into a small negative balance, then start returning 402 and search stops working. Top up or point the endpoint elsewhere.")
+                                .font(.caption2)
+                                .foregroundColor(theme.danger)
+                        }
+                        if let error = usage.balanceError {
+                            Text(error)
+                                .font(.caption2)
+                                .foregroundColor(theme.danger)
+                        }
+                    }
+
                     Link(destination: URL(string: "https://app.generalcompute.com")!) {
                         Label("Check your credit balance", systemImage: "arrow.up.right.square")
                     }
@@ -192,6 +218,12 @@ public struct SettingsScreen: View {
                         .font(.caption)
                         .foregroundColor(theme.secondaryText)
                 }
+            }
+            .task {
+                await usage.refreshSearchBalance(
+                    endpoint: settings.aiSearchEndpoint,
+                    apiKey: settings.aiSearchAPIKey
+                )
             }
             .navigationTitle("Settings")
             .toolbar {
