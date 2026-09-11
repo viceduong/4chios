@@ -176,6 +176,43 @@ public final class MediaDownloader: ObservableObject {
         SavedMediaStore.remove(board: board, tim: tim, ext: ext)
     }
 
+    /// Fetches a saved file whose local copy has gone missing.
+    ///
+    /// The reader already chose to keep this file, so there is nothing to ask
+    /// about. The database row is rewritten rather than added, and the bookmark
+    /// marker survives because `saveMediaRecord` will not clear it.
+    @discardableResult
+    public func restore(_ item: SavedMediaItem, environment: AppEnvironment) async -> Bool {
+        let (_, _, ok) = await Self.fetch(
+            Pending(
+                tim: item.tim,
+                ext: item.ext,
+                fsize: item.byteCount,
+                filename: item.filename,
+                postNumber: item.postNumber
+            ),
+            board: item.board
+        )
+        guard ok,
+              let file = SavedMediaStore.localURL(board: item.board, tim: item.tim, ext: item.ext),
+              let bytes = try? Data(contentsOf: file).count else { return false }
+
+        try? environment.database.saveMediaRecord(
+            SavedMediaRecord(
+                board: item.board,
+                tim: item.tim,
+                ext: item.ext,
+                postNumber: item.postNumber,
+                threadNumber: item.threadNumber,
+                filename: item.filename,
+                byteCount: bytes,
+                savedAt: item.addedAt,
+                bookmarkedAt: item.addedAt
+            )
+        )
+        return true
+    }
+
     public func cancel() {
         task?.cancel()
         task = nil

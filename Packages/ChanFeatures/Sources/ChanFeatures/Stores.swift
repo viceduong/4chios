@@ -328,11 +328,16 @@ public final class ThreadStore: ObservableObject {
         bookmarkedPosts.contains(number)
     }
 
-    public func setPostBookmarked(_ number: PostNumber, _ bookmarked: Bool) {
+    public func setPostBookmarked(_ post: Post, _ bookmarked: Bool) {
         if bookmarked {
-            try? environment.database.addPostBookmark(board: board, postNumber: number, threadNumber: op)
+            try? environment.database.addPostBookmark(
+                board: board,
+                postNumber: post.no,
+                threadNumber: op,
+                snapshot: post
+            )
         } else {
-            try? environment.database.removePostBookmark(board: board, postNumber: number)
+            try? environment.database.removePostBookmark(board: board, postNumber: post.no)
         }
         refreshPostBookmarks()
     }
@@ -403,6 +408,23 @@ public struct SavedThread: Identifiable, Hashable, Sendable {
     public let unreadReplies: Int
 }
 
+/// Ordering for the saved lists.
+public enum SavedSort: String, CaseIterable, Identifiable, Codable {
+    case recent
+    case oldest
+    case name
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .recent: return "Recently saved"
+        case .oldest: return "Oldest first"
+        case .name: return "Name (A-Z)"
+        }
+    }
+}
+
 /// An individually bookmarked post, resolved against the cached text.
 public struct SavedPost: Identifiable, Hashable, Sendable {
     public var id: String { "\(board.rawValue)/\(postNumber.value)" }
@@ -430,6 +452,9 @@ public struct SavedMediaItem: Identifiable, Hashable, Sendable {
     public var kind: MediaKind { MediaKind(ext: ext) }
     public var isVideo: Bool { kind.requiresPlaybackEngine }
     public var localURL: URL? { SavedMediaStore.localURL(board: board, tim: tim, ext: ext) }
+    /// Whether the file is still there. A saved item whose file has gone has to
+    /// say so, rather than presenting a row that opens nothing.
+    public var isOnDisk: Bool { localURL != nil }
 }
 
 /// Bookmarks, watched threads, saved posts and saved media.
@@ -470,7 +495,11 @@ public final class SavedStore: ObservableObject {
         }
 
         posts = ((try? environment.database.postBookmarks()) ?? []).map { bookmark in
-            let post = try? environment.database.post(board: bookmark.board, number: bookmark.postNumber)
+            // The bookmark's own snapshot first: it outlives the thread cache,
+            // and falling back to live storage is only for bookmarks taken
+            // before snapshots existed.
+            let post = bookmark.post
+                ?? (try? environment.database.post(board: bookmark.board, number: bookmark.postNumber))
             let text = PostHTMLParser.parse(post?.commentHTML ?? "").plainText
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return SavedPost(
@@ -494,6 +523,26 @@ public final class SavedStore: ObservableObject {
                 threadNumber: record.threadNumber,
                 addedAt: record.bookmarkedAt ?? record.savedAt
             )
+        }
+
+        // One ordering choice applies to every saved list, so the control means
+        // the same thing wherever the reader is.
+        bookmarks = ordered(bookmarks, date: \.addedAt, name: \.title)
+        watched = ordered(watched, date: \.addedAt, name: \.title)
+        posts = ordered(posts, date: \.addedAt, name: \.threadTitle)
+        media = ordered(media, date: \.addedAt, name: \.filename)
+    }
+
+    private func ordered<T>(_ items: [T], date: KeyPath<T, Date>, name: KeyPath<T, String>) -> [T] {
+        switch environment.settings.savedSort {
+        case .recent:
+            return items.sorted { $0[keyPath: date] > $1[keyPath: date] }
+        case .oldest:
+            return items.sorted { $0[keyPath: date] < $1[keyPath: date] }
+        case .name:
+            return items.sorted {
+                $0[keyPath: name].localizedCaseInsensitiveCompare($1[keyPath: name]) == .orderedAscending
+            }
         }
     }
 

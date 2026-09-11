@@ -251,7 +251,7 @@ public struct ThreadScreen: View {
             pendingScroll: $pendingScroll,
             onTogglePostBookmark: { post in
                 let saved = store.isPostBookmarked(post.no)
-                store.setPostBookmarked(post.no, !saved)
+                store.setPostBookmarked(post, !saved)
                 if saved { ChanHaptics.warning() } else { ChanHaptics.success() }
             },
             onSaveMedia: { post in

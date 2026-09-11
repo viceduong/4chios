@@ -22,8 +22,12 @@ public struct SavedScreen: View {
     }
 
     @StateObject private var store = SavedStore(environment: .shared)
+    @StateObject private var downloader = MediaDownloader()
+    @ObservedObject private var settings = AppEnvironment.shared.settings
     @State private var category: Category = .threads
     @State private var viewingMedia: SavedMediaItem?
+    /// Ids of files being fetched again, so their rows can show progress.
+    @State private var restoring: Set<String> = []
 
     @Environment(\.chanTheme) private var theme
 
@@ -54,6 +58,27 @@ public struct SavedScreen: View {
             .listStyle(.plain)
         }
         .navigationTitle("Saved")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    ForEach(SavedSort.allCases) { option in
+                        Button {
+                            settings.savedSort = option
+                            store.load()
+                        } label: {
+                            if settings.savedSort == option {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .tint(theme.accent)
+            }
+        }
         .onAppear { store.load() }
         .refreshable { store.load() }
         .sheet(item: $viewingMedia) { item in
@@ -193,11 +218,12 @@ public struct SavedScreen: View {
             Section {
                 ForEach(store.media) { item in
                     Button {
-                        viewingMedia = item
+                        open(item)
                     } label: {
                         mediaRow(item)
                     }
                     .buttonStyle(.plain)
+                    .disabled(restoring.contains(item.id))
                     .listRowBackground(theme.surface)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
@@ -209,7 +235,7 @@ public struct SavedScreen: View {
                     }
                 }
             } header: {
-                Text("\(store.media.count) files, \(ChanFormat.bytes(store.media.reduce(0) { $0 + $1.byteCount }))")
+                Text(mediaSummary)
             }
         }
     }
@@ -221,7 +247,13 @@ public struct SavedScreen: View {
             ZStack {
                 RoundedRectangle(cornerRadius: ChanRadius.small, style: .continuous)
                     .fill(theme.elevated)
-                if !item.isVideo {
+                if restoring.contains(item.id) {
+                    ProgressView()
+                } else if !item.isOnDisk {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 20))
+                        .foregroundColor(theme.danger)
+                } else if !item.isVideo {
                     ChanRemoteImage(url: item.localURL, scaling: .fill, cornerRadius: ChanRadius.small)
                 } else {
                     Image(systemName: "play.rectangle.fill")
@@ -235,10 +267,14 @@ public struct SavedScreen: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     boardTag(item.board)
-                    ChanTag(
-                        text: item.isVideo ? "VIDEO" : "IMAGE",
-                        color: item.isVideo ? theme.danger : theme.secondaryText
-                    )
+                    if !item.isOnDisk {
+                        ChanTag(text: "MISSING", color: theme.danger)
+                    } else {
+                        ChanTag(
+                            text: item.isVideo ? "VIDEO" : "IMAGE",
+                            color: item.isVideo ? theme.danger : theme.secondaryText
+                        )
+                    }
                     Spacer()
                     Text(ChanFormat.relative(item.addedAt))
                         .font(.caption2)
@@ -250,12 +286,44 @@ public struct SavedScreen: View {
                     .foregroundColor(theme.primaryText)
                     .lineLimit(1)
 
-                Text(ChanFormat.bytes(item.byteCount))
-                    .font(.caption2)
-                    .foregroundColor(theme.secondaryText)
+                Text(
+                    item.isOnDisk
+                        ? ChanFormat.bytes(item.byteCount)
+                        : "File gone - tap to download again"
+                )
+                .font(.caption2)
+                .foregroundColor(item.isOnDisk ? theme.secondaryText : theme.danger)
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Opens a saved file, fetching it again first if the local copy has gone.
+    private func open(_ item: SavedMediaItem) {
+        guard !item.isOnDisk else {
+            viewingMedia = item
+            return
+        }
+        restoring.insert(item.id)
+        Task {
+            let restored = await downloader.restore(item, environment: .shared)
+            restoring.remove(item.id)
+            store.load()
+            if restored {
+                ChanHaptics.success()
+            } else {
+                ChanHaptics.error()
+            }
+        }
+    }
+
+    private var mediaSummary: String {
+        let total = store.media.reduce(0) { $0 + $1.byteCount }
+        let missing = store.media.filter { !$0.isOnDisk }.count
+        let size = ChanFormat.bytes(total)
+        return missing == 0
+            ? "\(store.media.count) files, \(size)"
+            : "\(store.media.count) files, \(size) - \(missing) missing"
     }
 
     // MARK: - Shared

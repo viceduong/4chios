@@ -335,6 +335,63 @@ final class PostBookmarkTests: XCTestCase {
         XCTAssertEqual(try database.postBookmarks(board: "g").count, 1)
         XCTAssertEqual(try database.postBookmarkCount(), 2)
     }
+
+    // MARK: - Self-contained snapshots
+
+    private func makePost(_ no: Int, op: Int = 1, comment: String = "hello") -> Post {
+        Post(
+            no: PostNumber(no),
+            resto: PostNumber(op),
+            time: Date(timeIntervalSince1970: 1000),
+            subject: "subject \(no)",
+            commentHTML: comment,
+            lastModified: Date(timeIntervalSince1970: 1000)
+        )
+    }
+
+    func testASavedPostCarriesItsOwnCopy() throws {
+        try database.addPostBookmark(
+            board: "g", postNumber: 42, threadNumber: 1, snapshot: makePost(42)
+        )
+
+        let bookmark = try XCTUnwrap(try database.postBookmarks().first)
+        XCTAssertEqual(bookmark.post?.no, PostNumber(42))
+        XCTAssertEqual(bookmark.post?.commentHTML, "hello")
+        XCTAssertEqual(bookmark.post?.subject, "subject 42")
+    }
+
+    func testASavedPostIsReadableEvenIfTheThreadWasNeverCached() throws {
+        // Nothing was ever written to the post table, so the bookmark's own
+        // copy is the only source of the text. This is the case that used to
+        // render as an empty row.
+        try database.addPostBookmark(
+            board: "g", postNumber: 42, threadNumber: 1, snapshot: makePost(42)
+        )
+
+        XCTAssertNil(try database.post(board: "g", number: 42), "nothing is cached")
+        let bookmark = try XCTUnwrap(try database.postBookmarks().first)
+        XCTAssertEqual(bookmark.post?.commentHTML, "hello")
+    }
+
+    func testReBookmarkingWithoutASnapshotKeepsTheStoredOne() throws {
+        try database.addPostBookmark(
+            board: "g", postNumber: 42, threadNumber: 1, snapshot: makePost(42)
+        )
+        // A later write with no snapshot must not erase what is already held.
+        try database.addPostBookmark(board: "g", postNumber: 42, threadNumber: 1)
+
+        let bookmark = try XCTUnwrap(try database.postBookmarks().first)
+        XCTAssertNotNil(bookmark.post, "the stored copy survived")
+        XCTAssertEqual(bookmark.post?.commentHTML, "hello")
+    }
+
+    func testABookmarkWithoutASnapshotStillReadsBack() throws {
+        try database.addPostBookmark(board: "g", postNumber: 7, threadNumber: 1)
+
+        let bookmark = try XCTUnwrap(try database.postBookmarks().first)
+        XCTAssertNil(bookmark.post)
+        XCTAssertEqual(bookmark.postNumber, PostNumber(7))
+    }
 }
 
 final class BookmarkedMediaTests: XCTestCase {

@@ -95,6 +95,11 @@ public final class ChanSettings: ObservableObject {
         didSet { save() }
     }
 
+    /// Ordering for the saved lists, remembered across launches.
+    @Published public var savedSort: SavedSort {
+        didSet { save() }
+    }
+
     // MARK: - AI summaries
 
     /// OpenAI-compatible endpoint. Defaults to General Compute, which serves
@@ -187,6 +192,7 @@ public final class ChanSettings: ObservableObject {
         favoriteBoards = (defaults.stringArray(forKey: Keys.favoriteBoards) ?? []).map { BoardID($0) }
         showThumbnails = defaults.object(forKey: Keys.showThumbnails) as? Bool ?? true
         catalogSort = CatalogSort(rawValue: defaults.string(forKey: Keys.catalogSort) ?? "") ?? .bumpOrder
+        savedSort = SavedSort(rawValue: defaults.string(forKey: Keys.savedSort) ?? "") ?? .recent
 
         aiEndpoint = defaults.string(forKey: Keys.aiEndpoint)
             ?? AIConfiguration.generalComputeBaseURL.absoluteString
@@ -258,6 +264,7 @@ public final class ChanSettings: ObservableObject {
         defaults.set(favoriteBoards.map(\.rawValue), forKey: Keys.favoriteBoards)
         defaults.set(showThumbnails, forKey: Keys.showThumbnails)
         defaults.set(catalogSort.rawValue, forKey: Keys.catalogSort)
+        defaults.set(savedSort.rawValue, forKey: Keys.savedSort)
         defaults.set(aiEndpoint, forKey: Keys.aiEndpoint)
         defaults.set(aiModel, forKey: Keys.aiModel)
         defaults.set(aiSearchEndpoint, forKey: Keys.aiSearchEndpoint)
@@ -273,6 +280,7 @@ public final class ChanSettings: ObservableObject {
         static let favoriteBoards = "settings.favoriteBoards"
         static let showThumbnails = "settings.showThumbnails"
         static let catalogSort = "settings.catalogSort"
+        static let savedSort = "settings.savedSort"
         static let aiEndpoint = "settings.aiEndpoint"
         static let aiModel = "settings.aiModel"
         static let aiAPIKey = "settings.aiAPIKey"

@@ -8,12 +8,25 @@ public struct PostBookmark: Hashable, Sendable {
     public let postNumber: PostNumber
     public let threadNumber: PostNumber
     public let addedAt: Date
+    /// The post as it looked when it was bookmarked.
+    ///
+    /// Stored rather than looked up, because a saved post has to outlive the
+    /// thread cache: resolving it from live storage would leave the reader with
+    /// nothing precisely when the saved copy matters most.
+    public let post: Post?
 
-    public init(board: BoardID, postNumber: PostNumber, threadNumber: PostNumber, addedAt: Date) {
+    public init(
+        board: BoardID,
+        postNumber: PostNumber,
+        threadNumber: PostNumber,
+        addedAt: Date,
+        post: Post?
+    ) {
         self.board = board
         self.postNumber = postNumber
         self.threadNumber = threadNumber
         self.addedAt = addedAt
+        self.post = post
     }
 }
 
@@ -24,16 +37,22 @@ public extension ChanDatabase {
         board: BoardID,
         postNumber: PostNumber,
         threadNumber: PostNumber,
+        snapshot: Post? = nil,
         at date: Date = Date()
     ) throws {
+        let json = snapshot.flatMap { try? Self.encode($0) }
         try writer.write { db in
             try db.execute(
                 sql: """
-                INSERT INTO post_bookmark (board_id, post_no, op_no, added_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(board_id, post_no) DO UPDATE SET op_no = excluded.op_no
+                INSERT INTO post_bookmark (board_id, post_no, op_no, added_at, json)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(board_id, post_no) DO UPDATE SET
+                    op_no = excluded.op_no,
+                    -- Never overwrite a stored snapshot with nothing.
+                    json = COALESCE(excluded.json, post_bookmark.json)
                 """,
-                arguments: [board.rawValue, postNumber.value, threadNumber.value, date.timeIntervalSince1970]
+                arguments: [board.rawValue, postNumber.value, threadNumber.value,
+                            date.timeIntervalSince1970, json]
             )
         }
     }
@@ -64,7 +83,7 @@ public extension ChanDatabase {
                 rows = try Row.fetchAll(
                     db,
                     sql: """
-                    SELECT board_id, post_no, op_no, added_at FROM post_bookmark
+                    SELECT board_id, post_no, op_no, added_at, json FROM post_bookmark
                     WHERE board_id = ? ORDER BY added_at DESC
                     """,
                     arguments: [board.rawValue]
@@ -72,15 +91,20 @@ public extension ChanDatabase {
             } else {
                 rows = try Row.fetchAll(
                     db,
-                    sql: "SELECT board_id, post_no, op_no, added_at FROM post_bookmark ORDER BY added_at DESC"
+                    sql: """
+                    SELECT board_id, post_no, op_no, added_at, json FROM post_bookmark
+                    ORDER BY added_at DESC
+                    """
                 )
             }
             return rows.map { row in
-                PostBookmark(
+                let json: String? = row["json"]
+                return PostBookmark(
                     board: BoardID(row["board_id"]),
                     postNumber: PostNumber(row["post_no"]),
                     threadNumber: PostNumber(row["op_no"]),
-                    addedAt: Date(timeIntervalSince1970: row["added_at"])
+                    addedAt: Date(timeIntervalSince1970: row["added_at"]),
+                    post: json.flatMap { try? Self.decode(Post.self, from: $0) }
                 )
             }
         }

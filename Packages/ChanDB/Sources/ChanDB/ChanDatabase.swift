@@ -242,6 +242,28 @@ public final class ChanDatabase: @unchecked Sendable {
             try db.create(index: "post_bookmark_added", on: "post_bookmark", columns: ["added_at"])
         }
 
+        // v8: saved posts keep their own copy of the post.
+        //
+        // Until now a saved post was a reference resolved against the post
+        // table, so dropping the thread cache left the reader with a blank row.
+        // Existing bookmarks are backfilled from whatever is still cached, so
+        // the change applies to what is already saved rather than only to new
+        // bookmarks.
+        migrator.registerMigration("v8") { db in
+            try db.alter(table: "post_bookmark") { table in
+                table.add(column: "json", .text)
+            }
+            try db.execute(sql: """
+                UPDATE post_bookmark
+                SET json = (
+                    SELECT p.json FROM post p
+                    WHERE p.board_id = post_bookmark.board_id
+                      AND p.no = post_bookmark.post_no
+                )
+                WHERE json IS NULL
+                """)
+        }
+
         return migrator
     }
     // MARK: - JSON codec
