@@ -41,6 +41,11 @@ Package.resolved.bak
 artifacts/
 build-manifest.json
 
+# Local scratch space and one-off tooling (CI watchers, third-party source
+# caches for reference). Never committed: it holds no project code, and a
+# cached copy of a GPL-licensed project must not end up in this repository.
+.local/
+
 # Editors
 .vscode/
 .idea/
