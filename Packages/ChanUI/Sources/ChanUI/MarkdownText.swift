@@ -14,18 +14,31 @@ import UIKit
 /// `NSAttributedString` and show it in a non-scrolling text view. That keeps
 /// headings, hanging-indented lists, fenced code and tappable links all working
 /// on iOS 15, where the Foundation attributes are long established.
-public struct MarkdownText: UIViewRepresentable {
+public struct MarkdownText: View {
     private let blocks: [MarkdownBlock]
     private let fontSize: CGFloat
-
-    @Environment(\.chanTheme) private var theme
 
     public init(_ markdown: String, fontSize: CGFloat) {
         self.blocks = MarkdownDocument.parse(markdown)
         self.fontSize = fontSize
     }
 
-    public func makeUIView(context: Context) -> UITextView {
+    public var body: some View {
+        // The width constraint lives here rather than at each call site: a text
+        // view asked to size itself with no bounded width reports the width of its
+        // longest line, which is what let the text run off the screen.
+        MarkdownTextView(blocks: blocks, fontSize: fontSize)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MarkdownTextView: UIViewRepresentable {
+    let blocks: [MarkdownBlock]
+    let fontSize: CGFloat
+
+    @Environment(\.chanTheme) private var theme
+
+    func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.isEditable = false
         view.isScrollEnabled = false
@@ -36,14 +49,17 @@ public struct MarkdownText: UIViewRepresentable {
         view.adjustsFontForContentSizeCategory = true
         view.isSelectable = true
         view.textContainer.widthTracksTextView = true
-        // Without these the view collapses to nothing inside a scroll view, or
-        // takes the full height of its container instead of its own text.
+        // Vertical: take the text's own height and never less.
         view.setContentCompressionResistancePriority(.required, for: .vertical)
         view.setContentHuggingPriority(.required, for: .vertical)
+        // Horizontal: claim no width of our own, so the width SwiftUI proposes is
+        // what the text wraps inside.
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         return view
     }
 
-    public func updateUIView(_ view: UITextView, context: Context) {
+    func updateUIView(_ view: UITextView, context: Context) {
         view.linkTextAttributes = [.foregroundColor: UIColor(theme.link)]
         view.attributedText = MarkdownRenderer(theme: theme, fontSize: fontSize)
             .attributedString(for: blocks)
