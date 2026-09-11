@@ -72,6 +72,7 @@ public struct CatalogScreen: View {
     @State private var showComposer = false
     @State private var query = ""
     @State private var isSearching = false
+    @State private var showSummary = false
 
     public init(board: BoardID) {
         _store = StateObject(wrappedValue: CatalogStore(board: board, environment: .shared))
@@ -105,6 +106,9 @@ public struct CatalogScreen: View {
         .onChange(of: query) { store.setQuery($0) }
         .background(theme.background.ignoresSafeArea())
         .background(threadLink)
+        .sheet(isPresented: $showSummary) {
+            CatalogSummaryScreen(board: store.board, threads: store.posts)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 14) {
@@ -116,6 +120,14 @@ public struct CatalogScreen: View {
                         }
                     } label: {
                         Image(systemName: "magnifyingglass")
+                    }
+                    // Reading the whole board is the catalog's own version of the
+                    // thread summary, so it gets a matching icon in the same place.
+                    Button {
+                        ChanHaptics.tap()
+                        showSummary = true
+                    } label: {
+                        Image(systemName: "sparkles")
                     }
                     Menu {
                         ForEach(CatalogSort.allCases) { sort in
