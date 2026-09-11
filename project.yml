@@ -48,8 +48,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: 4chios
-        CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "12"
+        CFBundleShortVersionString: "0.3.1"
+        CFBundleVersion: "13"
         LSRequiresIPhoneOS: true
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}

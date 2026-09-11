@@ -4,7 +4,7 @@ A native, offline-first imageboard client for **iOS 15.6.1+**, built with SwiftU
 Aiming for Apollo-for-Reddit polish: smooth 60/120 fps scrolling, a real local database,
 4chan-X-grade filters, live threads, and native posting.
 
-> **Status:** `0.3.0` — feature-complete read + post client, AI summaries, catalog sorting. CI green.
+> **Status:** `0.3.1` — feature-complete read + post client, AI summaries, catalog sorting. CI green.
 > Full design lives in [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Features

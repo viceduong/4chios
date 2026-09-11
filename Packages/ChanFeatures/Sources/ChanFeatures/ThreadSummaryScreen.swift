@@ -12,6 +12,7 @@ import UIKit
 public struct ThreadSummaryScreen: View {
     @ObservedObject private var store: ThreadSummaryStore
     @ObservedObject private var chat: ThreadChatStore
+    @ObservedObject private var settings = AppEnvironment.shared.settings
     private let posts: [Post]
 
     @Environment(\.chanTheme) private var theme
@@ -203,7 +204,7 @@ public struct ThreadSummaryScreen: View {
             HStack {
                 Spacer(minLength: ChanSpacing.xl)
                 Text(turn.text)
-                    .font(.system(size: 15))
+                    .font(.system(size: settings.fontSize))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -220,7 +221,7 @@ public struct ThreadSummaryScreen: View {
                 }
 
                 Text(turn.text)
-                    .font(.system(size: 15))
+                    .font(.system(size: settings.fontSize))
                     .foregroundColor(theme.primaryText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -329,7 +330,7 @@ public struct ThreadSummaryScreen: View {
 
     private func summaryText(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 15))
+            .font(.system(size: settings.fontSize))
             .foregroundColor(theme.primaryText)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
