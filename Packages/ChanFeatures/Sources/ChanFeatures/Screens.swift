@@ -263,15 +263,24 @@ public struct ThreadScreen: View {
         }
     }
 
-    /// Opening from the list shows that one file. Paging into other posts'
-    /// attachments from there would be a surprise, so the pager is reserved for
-    /// the gallery, where the whole set is visible and the context is obvious.
+    /// Opening any file shows the thread's whole set, positioned at that file,
+    /// so swiping continues from where the reader tapped. A set of one is just
+    /// the single-file case.
     private func openInViewer(_ post: Post) {
         guard let attachment = post.attachment else { return }
-        viewer = ViewerRequest(
-            items: [ThreadGalleryItem(postNumber: post.no, attachment: attachment)],
-            index: 0
-        )
+        let items = galleryItems
+
+        // The tapped post is in `galleryItems` by construction, but the store can
+        // have moved on between render and tap, so fall back rather than opening
+        // an empty viewer.
+        guard let index = items.firstIndex(where: { $0.attachment.tim == attachment.tim }) else {
+            viewer = ViewerRequest(
+                items: [ThreadGalleryItem(postNumber: post.no, attachment: attachment)],
+                index: 0
+            )
+            return
+        }
+        viewer = ViewerRequest(items: items, index: index)
     }
 
     public var body: some View {
@@ -485,14 +494,10 @@ public struct MediaViewerScreen: View {
     @Environment(\.chanTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
-    public init(board: BoardID, post: Post) {
-        self.board = board
-        self.items = post.attachment.map {
-            [ThreadGalleryItem(postNumber: post.no, attachment: $0)]
-        } ?? []
-        _index = State(initialValue: 0)
-    }
-
+    /// One item for a single file, several for a pageable set.
+    ///
+    /// There is deliberately no single-file initialiser: the viewer always
+    /// pages, so a caller cannot build one that does not.
     init(board: BoardID, items: [ThreadGalleryItem], start: Int) {
         self.board = board
         self.items = items
