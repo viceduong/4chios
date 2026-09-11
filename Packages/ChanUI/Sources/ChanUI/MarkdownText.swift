@@ -1,22 +1,28 @@
 import ChanCore
 import SwiftUI
-import UIKit
 
 /// Renders the Markdown a language model writes.
 ///
-/// Not `Text(...)`: SwiftUI parses Markdown only for string *literals*, so text
-/// arriving in a `String` variable showed its own asterisks and hashes verbatim.
-/// `AttributedString(markdown:)` parses it but discards block structure -
-/// headings flatten, list markers vanish - and its inline attributes differ
-/// across OS versions.
+/// Not `Text(string)`: SwiftUI parses Markdown only for string *literals*, so
+/// text arriving in a `String` variable showed its own asterisks and hashes.
+/// `AttributedString(markdown:)` parses it but discards block structure, so the
+/// blocks are parsed in ChanCore and styled here.
 ///
-/// So this takes the same route as the post renderer: build an
-/// `NSAttributedString` and show it in a non-scrolling text view. That keeps
-/// headings, hanging-indented lists, fenced code and tappable links all working
-/// on iOS 15, where the Foundation attributes are long established.
+/// Styling goes through `Text(AttributedString)` rather than a bridged text view.
+/// A UIKit view has to be told its width before it can say its height, and the
+/// two are measured in the wrong order often enough that it clipped the last line
+/// of every answer. `Text` wraps and sizes itself, so there is no measurement to
+/// get wrong.
+///
+/// Two consequences of that choice, both deliberate: an inline link is styled and
+/// tappable, but emphasis runs share one `Text` so a tap opens the link rather
+/// than the paragraph; and a wrapped list item lines up under its marker instead
+/// of under its text, since SwiftUI has no hanging indent.
 public struct MarkdownText: View {
     private let blocks: [MarkdownBlock]
     private let fontSize: CGFloat
+
+    @Environment(\.chanTheme) private var theme
 
     public init(_ markdown: String, fontSize: CGFloat) {
         self.blocks = MarkdownDocument.parse(markdown)
@@ -24,59 +30,91 @@ public struct MarkdownText: View {
     }
 
     public var body: some View {
-        // The width constraint lives here rather than at each call site: a text
-        // view asked to size itself with no bounded width reports the width of its
-        // longest line, which is what let the text run off the screen.
-        MarkdownTextView(blocks: blocks, fontSize: fontSize)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct MarkdownTextView: UIViewRepresentable {
-    let blocks: [MarkdownBlock]
-    let fontSize: CGFloat
-
-    @Environment(\.chanTheme) private var theme
-
-    func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
-        view.isEditable = false
-        view.isScrollEnabled = false
-        view.backgroundColor = .clear
-        view.textContainerInset = .zero
-        view.textContainer.lineFragmentPadding = 0
-        view.dataDetectorTypes = []
-        view.adjustsFontForContentSizeCategory = true
-        view.isSelectable = true
-        view.textContainer.widthTracksTextView = true
-        // Vertical: take the text's own height and never less.
-        view.setContentCompressionResistancePriority(.required, for: .vertical)
-        view.setContentHuggingPriority(.required, for: .vertical)
-        // Horizontal: claim no width of our own, so the width SwiftUI proposes is
-        // what the text wraps inside.
-        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return view
+        VStack(alignment: .leading, spacing: max(6, fontSize * 0.5)) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                view(for: block)
+                    .padding(.top, index == 0 ? 0 : spacingBefore(block))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    func updateUIView(_ view: UITextView, context: Context) {
-        view.linkTextAttributes = [.foregroundColor: UIColor(theme.link)]
-        view.attributedText = MarkdownRenderer(theme: theme, fontSize: fontSize)
-            .attributedString(for: blocks)
+    // MARK: - Blocks
+
+    @ViewBuilder
+    private func view(for block: MarkdownBlock) -> some View {
+        switch block {
+        case .paragraph(let spans):
+            blockText(spans, size: fontSize, weight: .regular, color: theme.primaryText)
+
+        case .heading(let level, let spans):
+            blockText(
+                spans,
+                size: headingSize(level),
+                weight: .semibold,
+                color: theme.primaryText
+            )
+
+        case .bullet(let depth, let spans):
+            listRow(marker: "•", depth: depth, spans: spans)
+
+        case .numbered(let depth, let marker, let spans):
+            listRow(marker: marker, depth: depth, spans: spans)
+
+        case .quote(let spans):
+            HStack(alignment: .top, spacing: ChanSpacing.s) {
+                Capsule()
+                    .fill(theme.accent.opacity(0.6))
+                    .frame(width: 3)
+                blockText(spans, size: fontSize, weight: .regular, color: theme.secondaryText)
+                    .italic()
+            }
+
+        case .code(let code):
+            Text(code)
+                .font(.system(size: max(fontSize - 1, 10), design: .monospaced))
+                .foregroundColor(theme.primaryText)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(ChanSpacing.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.elevated)
+                .clipShape(RoundedRectangle(cornerRadius: ChanRadius.small, style: .continuous))
+
+        case .rule:
+            Rectangle()
+                .fill(theme.elevated)
+                .frame(height: 1)
+                .frame(maxWidth: .infinity)
+        }
     }
-}
 
-/// Turns parsed Markdown blocks into styled text.
-struct MarkdownRenderer {
-    let theme: ChanTheme
-    let fontSize: CGFloat
+    /// One list line. The marker gets a fixed column so markers and numbers line
+    /// up down the list, and a wrapped line lands under the marker rather than
+    /// under the text - SwiftUI cannot hang an indent.
+    private func listRow(marker: String, depth: Int, spans: [MarkdownSpan]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ChanSpacing.s) {
+            Text(marker)
+                .font(.system(size: fontSize, weight: .semibold))
+                .foregroundColor(theme.secondaryText)
+                .frame(minWidth: 16, alignment: .leading)
+            blockText(spans, size: fontSize, weight: .regular, color: theme.primaryText)
+        }
+        .padding(.leading, CGFloat(depth) * 16)
+    }
 
-    // MARK: - Metrics
-
-    private var baseFont: UIFont { .systemFont(ofSize: fontSize) }
-    private var blockSpacing: CGFloat { max(6, fontSize * 0.5) }
-    private var lineSpacing: CGFloat { max(2, fontSize * 0.18) }
-    private var indentStep: CGFloat { 16 }
+    private func blockText(
+        _ spans: [MarkdownSpan],
+        size: CGFloat,
+        weight: Font.Weight,
+        color: Color
+    ) -> some View {
+        Text(attributed(spans, size: size, weight: weight))
+            .font(.system(size: size, weight: weight))
+            .foregroundColor(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
 
     private func headingSize(_ level: Int) -> CGFloat {
         switch level {
@@ -87,215 +125,45 @@ struct MarkdownRenderer {
         }
     }
 
-    // MARK: - Document
-
-    func attributedString(for blocks: [MarkdownBlock]) -> NSAttributedString {
-        let output = NSMutableAttributedString()
-        for (index, block) in blocks.enumerated() {
-            output.append(self.block(block, isLast: index == blocks.count - 1))
-        }
-        return output
+    private func spacingBefore(_ block: MarkdownBlock) -> CGFloat {
+        if case .heading = block { return max(8, fontSize * 0.7) }
+        return 0
     }
 
-    private func block(_ block: MarkdownBlock, isLast: Bool) -> NSAttributedString {
-        // The terminator carries the paragraph style, which is what produces the
-        // spacing between blocks.
-        let terminator = isLast ? "" : "\n"
+    // MARK: - Inline
 
-        switch block {
-        case .paragraph(let spans):
-            return line(
-                spans,
-                style: paragraph(),
-                font: baseFont,
-                color: UIColor(theme.primaryText),
-                terminator: terminator
-            )
+    /// Emphasis, code and links, as attributes on one string.
+    ///
+    /// Strikethrough is parsed but not drawn: the obvious attribute for it is not
+    /// available at this deployment target, and struck-through model output is
+    /// rare enough that plain text is the better trade than a second renderer.
+    private func attributed(_ spans: [MarkdownSpan], size: CGFloat, weight: Font.Weight) -> AttributedString {
+        var output = AttributedString()
 
-        case .heading(let level, let spans):
-            let size = headingSize(level)
-            let style = paragraph(
-                spaceBefore: blockSpacing * 1.4,
-                spaceAfter: blockSpacing * 0.4
-            )
-            return line(
-                spans,
-                style: style,
-                font: .systemFont(ofSize: size, weight: .semibold),
-                color: UIColor(theme.primaryText),
-                terminator: terminator
-            )
-
-        case .bullet(let depth, let spans):
-            return listItem(
-                marker: "•",
-                depth: depth,
-                spans: spans,
-                terminator: terminator
-            )
-
-        case .numbered(let depth, let marker, let spans):
-            return listItem(
-                marker: marker,
-                depth: depth,
-                spans: spans,
-                terminator: terminator
-            )
-
-        case .quote(let spans):
-            let style = paragraph()
-            style.firstLineHeadIndent = 0
-            style.headIndent = 12
-            style.lineSpacing = lineSpacing
-
-            let result = NSMutableAttributedString()
-            result.append(
-                NSAttributedString(
-                    string: "▎ ",
-                    attributes: [
-                        .font: baseFont,
-                        .foregroundColor: UIColor(theme.accent),
-                    ]
-                )
-            )
-            append(spans, to: result, font: baseFont, color: UIColor(theme.secondaryText))
-            result.append(NSAttributedString(string: terminator, attributes: [.font: baseFont]))
-            result.addAttribute(
-                .paragraphStyle,
-                value: style,
-                range: NSRange(location: 0, length: result.length)
-            )
-            return result
-
-        case .code(let code):
-            let style = paragraph()
-            style.lineSpacing = 2
-            return NSAttributedString(
-                string: code + terminator,
-                attributes: [
-                    .font: UIFont.monospacedSystemFont(ofSize: max(fontSize - 1, 10), weight: .regular),
-                    .foregroundColor: UIColor(theme.primaryText),
-                    .backgroundColor: UIColor(theme.elevated),
-                    .paragraphStyle: style,
-                ]
-            )
-
-        case .rule:
-            return NSAttributedString(
-                string: String(repeating: "─", count: 30) + terminator,
-                attributes: [
-                    .font: baseFont,
-                    .foregroundColor: UIColor(theme.separator),
-                    .paragraphStyle: paragraph(spaceBefore: blockSpacing, spaceAfter: blockSpacing),
-                ]
-            )
-        }
-    }
-
-    // MARK: - Pieces
-
-    private func line(
-        _ spans: [MarkdownSpan],
-        style: NSParagraphStyle,
-        font: UIFont,
-        color: UIColor,
-        terminator: String
-    ) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        append(spans, to: result, font: font, color: color)
-        result.append(NSAttributedString(string: terminator, attributes: [.font: font]))
-        result.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: result.length))
-        return result
-    }
-
-    /// A list item hangs on a tab stop, so a wrapped line lines up under the text
-    /// rather than under the marker.
-    private func listItem(
-        marker: String,
-        depth: Int,
-        spans: [MarkdownSpan],
-        terminator: String
-    ) -> NSAttributedString {
-        let indent = CGFloat(depth) * indentStep
-        let markerWidth = max(18, CGFloat(marker.count) * fontSize * 0.62)
-
-        let style = paragraph()
-        style.firstLineHeadIndent = indent
-        style.headIndent = indent + markerWidth
-        style.tabStops = [NSTextTab(textAlignment: .left, location: indent + markerWidth)]
-        style.paragraphSpacing = blockSpacing * 0.35
-
-        let result = NSMutableAttributedString()
-        result.append(
-            NSAttributedString(
-                string: marker + "\t",
-                attributes: [
-                    .font: baseFont,
-                    .foregroundColor: UIColor(theme.secondaryText),
-                ]
-            )
-        )
-        append(spans, to: result, font: baseFont, color: UIColor(theme.primaryText))
-        result.append(NSAttributedString(string: terminator, attributes: [.font: baseFont]))
-        result.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: result.length))
-        return result
-    }
-
-    private func append(
-        _ spans: [MarkdownSpan],
-        to output: NSMutableAttributedString,
-        font: UIFont,
-        color: UIColor
-    ) {
         for span in spans {
-            var attributes: [NSAttributedString.Key: Any] = [
-                .font: styled(span, base: font),
-                .foregroundColor: color,
-            ]
+            var piece = AttributedString(span.text)
 
-            if span.strikethrough {
-                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-            }
+            var font = Font.system(size: size, weight: weight)
+            if span.bold { font = .system(size: size, weight: .semibold) }
+            if span.italic { font = font.italic() }
+            if case .code = span.kind { font = .system(size: max(size - 1, 10), design: .monospaced) }
+            piece.font = font
 
             switch span.kind {
             case .code:
-                attributes[.backgroundColor] = UIColor(theme.elevated)
+                piece.backgroundColor = theme.elevated
             case .link(let url):
                 if let url {
-                    attributes[.link] = url
-                    attributes[.foregroundColor] = UIColor(theme.link)
+                    piece.link = url
+                    piece.foregroundColor = theme.accent
                 }
             case .text:
                 break
             }
 
-            output.append(NSAttributedString(string: span.text, attributes: attributes))
-        }
-    }
-
-    private func styled(_ span: MarkdownSpan, base: UIFont) -> UIFont {
-        if case .code = span.kind {
-            return .monospacedSystemFont(ofSize: max(base.pointSize - 1, 10), weight: .regular)
+            output.append(piece)
         }
 
-        var font = base
-        if span.bold {
-            font = .systemFont(ofSize: base.pointSize, weight: .semibold)
-        }
-        if span.italic {
-            let traits = font.fontDescriptor.symbolicTraits.union(.traitItalic)
-            if let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
-                font = UIFont(descriptor: descriptor, size: 0)
-            }
-        }
-        return font
-    }
-
-    private func paragraph(spaceBefore: CGFloat = 0, spaceAfter: CGFloat? = nil) -> NSMutableParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.paragraphSpacingBefore = spaceBefore
-        style.paragraphSpacing = spaceAfter ?? blockSpacing
-        style.lineSpacing = lineSpacing
-        return style
+        return output
     }
 }
