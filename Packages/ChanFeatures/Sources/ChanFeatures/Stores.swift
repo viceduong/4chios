@@ -153,7 +153,7 @@ public final class CatalogStore: ObservableObject {
     }
 
     private func rebuild() {
-        let needle = query.lowercased()
+        let needle = PostSearch.normalized(query)
         let matched = needle.isEmpty
             ? visible
             : visible.filter { haystacks[$0.no]?.contains(needle) == true }
