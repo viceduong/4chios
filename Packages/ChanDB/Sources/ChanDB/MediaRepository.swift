@@ -8,31 +8,42 @@ public struct SavedMediaRecord: Hashable, Sendable {
     public let tim: Int
     public let ext: String
     public let postNumber: PostNumber
+    /// The thread the file belongs to, when known.
+    public let threadNumber: PostNumber?
     public let filename: String
     public let byteCount: Int
     public let savedAt: Date
+    /// Set when the reader explicitly bookmarked this file, as opposed to it
+    /// arriving as part of a bulk thread download.
+    public let bookmarkedAt: Date?
 
     public init(
         board: BoardID,
         tim: Int,
         ext: String,
         postNumber: PostNumber,
+        threadNumber: PostNumber? = nil,
         filename: String,
         byteCount: Int,
-        savedAt: Date
+        savedAt: Date,
+        bookmarkedAt: Date? = nil
     ) {
         self.board = board
         self.tim = tim
         self.ext = ext
         self.postNumber = postNumber
+        self.threadNumber = threadNumber
         self.filename = filename
         self.byteCount = byteCount
         self.savedAt = savedAt
+        self.bookmarkedAt = bookmarkedAt
     }
 
     public var fileName: String {
         "\(tim)\(ext.hasPrefix(".") ? ext : ".\(ext)")"
     }
+
+    public var isBookmarked: Bool { bookmarkedAt != nil }
 }
 
 public extension ChanDatabase {
@@ -41,18 +52,23 @@ public extension ChanDatabase {
         try writer.write { db in
             try db.execute(
                 sql: """
-                INSERT INTO saved_media (board_id, tim, ext, post_no, filename, byte_count, saved_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO saved_media
+                    (board_id, tim, ext, post_no, op_no, filename, byte_count, saved_at, bookmarked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(board_id, tim) DO UPDATE SET
                     ext = excluded.ext,
                     post_no = excluded.post_no,
                     filename = excluded.filename,
                     byte_count = excluded.byte_count,
-                    saved_at = excluded.saved_at
+                    saved_at = excluded.saved_at,
+                    -- A bulk download must not clear an explicit bookmark.
+                    bookmarked_at = COALESCE(saved_media.bookmarked_at, excluded.bookmarked_at)
                 """,
                 arguments: [
                     record.board.rawValue, record.tim, record.ext, record.postNumber.value,
-                    record.filename, record.byteCount, record.savedAt.timeIntervalSince1970,
+                    record.threadNumber?.value, record.filename, record.byteCount,
+                    record.savedAt.timeIntervalSince1970,
+                    record.bookmarkedAt?.timeIntervalSince1970,
                 ]
             )
         }
@@ -63,7 +79,7 @@ public extension ChanDatabase {
             try Row.fetchAll(
                 db,
                 sql: """
-                SELECT board_id, tim, ext, post_no, filename, byte_count, saved_at
+                SELECT board_id, tim, ext, post_no, op_no, filename, byte_count, saved_at, bookmarked_at
                 FROM saved_media WHERE board_id = ? ORDER BY post_no, tim
                 """,
                 arguments: [board.rawValue]
@@ -87,16 +103,14 @@ public extension ChanDatabase {
     /// Bytes on disk, for the whole device or one board.
     func savedMediaByteCount(board: BoardID? = nil) throws -> Int {
         try writer.read { db in
-            let sql: String
-            let arguments: StatementArguments
             if let board {
-                sql = "SELECT COALESCE(SUM(byte_count), 0) FROM saved_media WHERE board_id = ?"
-                arguments = [board.rawValue]
-            } else {
-                sql = "SELECT COALESCE(SUM(byte_count), 0) FROM saved_media"
-                arguments = []
+                return try Int.fetchOne(
+                    db,
+                    sql: "SELECT COALESCE(SUM(byte_count), 0) FROM saved_media WHERE board_id = ?",
+                    arguments: [board.rawValue]
+                ) ?? 0
             }
-            return try Int.fetchOne(db, sql: sql, arguments: arguments) ?? 0
+            return try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(byte_count), 0) FROM saved_media") ?? 0
         }
     }
 
@@ -131,15 +145,19 @@ public extension ChanDatabase {
         }
     }
 
-    private static func mediaRecord(from row: Row) -> SavedMediaRecord {
-        SavedMediaRecord(
+    static func mediaRecord(from row: Row) -> SavedMediaRecord {
+        let threadNumber: Int? = row["op_no"]
+        let bookmarkedAt: Double? = row["bookmarked_at"]
+        return SavedMediaRecord(
             board: BoardID(row["board_id"]),
             tim: row["tim"],
             ext: row["ext"],
             postNumber: PostNumber(row["post_no"]),
+            threadNumber: threadNumber.map(PostNumber.init),
             filename: row["filename"],
             byteCount: row["byte_count"],
-            savedAt: Date(timeIntervalSince1970: row["saved_at"])
+            savedAt: Date(timeIntervalSince1970: row["saved_at"]),
+            bookmarkedAt: bookmarkedAt.map(Date.init(timeIntervalSince1970:))
         )
     }
 }

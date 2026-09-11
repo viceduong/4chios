@@ -320,6 +320,28 @@ public final class ThreadStore: ObservableObject {
         PostSearch.matches(in: posts, query: query)
     }
 
+    // MARK: - Individual post bookmarks
+
+    @Published public private(set) var bookmarkedPosts: Set<PostNumber> = []
+
+    public func isPostBookmarked(_ number: PostNumber) -> Bool {
+        bookmarkedPosts.contains(number)
+    }
+
+    public func setPostBookmarked(_ number: PostNumber, _ bookmarked: Bool) {
+        if bookmarked {
+            try? environment.database.addPostBookmark(board: board, postNumber: number, threadNumber: op)
+        } else {
+            try? environment.database.removePostBookmark(board: board, postNumber: number)
+        }
+        refreshPostBookmarks()
+    }
+
+    private func refreshPostBookmarks() {
+        let stored = (try? environment.database.postBookmarks(board: board)) ?? []
+        bookmarkedPosts = Set(stored.map(\.postNumber))
+    }
+
     /// Records scroll progress so the thread can be resumed later.
     public func markRead(upTo number: PostNumber) throws {
         try environment.database.setLastRead(board: board, op: op, postNumber: number)
@@ -333,6 +355,7 @@ public final class ThreadStore: ObservableObject {
     public func refreshUserState() {
         isBookmarked = (try? environment.database.isBookmarked(board: board, op: op)) ?? false
         isWatched = (try? environment.database.isWatched(board: board, op: op)) ?? false
+        refreshPostBookmarks()
     }
 
     public func toggleBookmark() {
@@ -380,11 +403,42 @@ public struct SavedThread: Identifiable, Hashable, Sendable {
     public let unreadReplies: Int
 }
 
-/// Bookmarks and watched threads, resolved against the cached posts.
+/// An individually bookmarked post, resolved against the cached text.
+public struct SavedPost: Identifiable, Hashable, Sendable {
+    public var id: String { "\(board.rawValue)/\(postNumber.value)" }
+    public let board: BoardID
+    public let postNumber: PostNumber
+    public let threadNumber: PostNumber
+    /// The thread's subject, so a saved post is recognisable out of context.
+    public let threadTitle: String
+    public let snippet: String
+    public let addedAt: Date
+}
+
+/// A media file the reader saved, with the thread it came from.
+public struct SavedMediaItem: Identifiable, Hashable, Sendable {
+    public var id: String { "\(board.rawValue)/\(tim)" }
+    public let board: BoardID
+    public let tim: Int
+    public let ext: String
+    public let filename: String
+    public let byteCount: Int
+    public let postNumber: PostNumber
+    public let threadNumber: PostNumber?
+    public let addedAt: Date
+
+    public var kind: MediaKind { MediaKind(ext: ext) }
+    public var isVideo: Bool { kind.requiresPlaybackEngine }
+    public var localURL: URL? { SavedMediaStore.localURL(board: board, tim: tim, ext: ext) }
+}
+
+/// Bookmarks, watched threads, saved posts and saved media.
 @MainActor
 public final class SavedStore: ObservableObject {
     @Published public private(set) var bookmarks: [SavedThread] = []
     @Published public private(set) var watched: [SavedThread] = []
+    @Published public private(set) var posts: [SavedPost] = []
+    @Published public private(set) var media: [SavedMediaItem] = []
 
     private let environment: AppEnvironment
 
@@ -414,6 +468,54 @@ public final class SavedStore: ObservableObject {
                 lastSeenReply: watch.lastSeenReply
             )
         }
+
+        posts = ((try? environment.database.postBookmarks()) ?? []).map { bookmark in
+            let post = try? environment.database.post(board: bookmark.board, number: bookmark.postNumber)
+            let text = PostHTMLParser.parse(post?.commentHTML ?? "").plainText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return SavedPost(
+                board: bookmark.board,
+                postNumber: bookmark.postNumber,
+                threadNumber: bookmark.threadNumber,
+                threadTitle: threadTitle(board: bookmark.board, op: bookmark.threadNumber),
+                snippet: text.isEmpty ? "(no text)" : String(text.prefix(180)),
+                addedAt: bookmark.addedAt
+            )
+        }
+
+        media = ((try? environment.database.bookmarkedMedia()) ?? []).map { record in
+            SavedMediaItem(
+                board: record.board,
+                tim: record.tim,
+                ext: record.ext,
+                filename: record.filename,
+                byteCount: record.byteCount,
+                postNumber: record.postNumber,
+                threadNumber: record.threadNumber,
+                addedAt: record.bookmarkedAt ?? record.savedAt
+            )
+        }
+    }
+
+    /// The subject of a thread, for labelling a post saved out of context.
+    private func threadTitle(board: BoardID, op: PostNumber) -> String {
+        guard let opPost = try? environment.database.post(board: board, number: op) else {
+            return "Thread #\(op.value)"
+        }
+        if let subject = opPost.subject, !subject.isEmpty { return subject }
+        let body = PostHTMLParser.parse(opPost.commentHTML ?? "").plainText
+        return body.isEmpty ? "Thread #\(op.value)" : String(body.prefix(60))
+    }
+
+    public func remove(_ post: SavedPost) {
+        try? environment.database.removePostBookmark(board: post.board, postNumber: post.postNumber)
+        load()
+    }
+
+    public func remove(_ item: SavedMediaItem) {
+        try? environment.database.deleteMediaRecord(board: item.board, tim: item.tim)
+        SavedMediaStore.remove(board: item.board, tim: item.tim, ext: item.ext)
+        load()
     }
 
     public func remove(_ thread: SavedThread) {

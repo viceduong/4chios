@@ -127,6 +127,19 @@ public extension ChanDatabase {
         }
     }
 
+    /// A single cached post.
+    func post(board: BoardID, number: PostNumber) throws -> Post? {
+        try writer.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT json FROM post WHERE board_id = ? AND no = ?",
+                arguments: [board.rawValue, number.value]
+            ) else { return nil }
+            let json: String = row["json"]
+            return try? Self.decode(Post.self, from: json)
+        }
+    }
+
     /// The highest post number cached for a thread, or nil.
     func lastPostNumber(board: BoardID, op: PostNumber) throws -> PostNumber? {
         try writer.read { db -> PostNumber? in

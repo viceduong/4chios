@@ -53,6 +53,12 @@ enum SavedMediaStore {
         return data.count
     }
 
+    /// Deletes one file, used when a media bookmark is removed.
+    static func remove(board: BoardID, tim: Int, ext: String, fileManager: FileManager = .default) {
+        guard let url = localURL(board: board, tim: tim, ext: ext, fileManager: fileManager) else { return }
+        try? fileManager.removeItem(at: url)
+    }
+
     /// Deletes every file for a board, or all of them.
     static func delete(board: BoardID? = nil, fileManager: FileManager = .default) throws {
         let target: URL

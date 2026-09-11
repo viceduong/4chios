@@ -34,15 +34,20 @@ struct ThreadCollectionView: UIViewControllerRepresentable {
     let fontSize: CGFloat
     let searchTerm: String?
     @Binding var pendingScroll: PostNumber?
+    let onTogglePostBookmark: (Post) -> Void
+    let onSaveMedia: (Post) -> Void
     let onOpenMedia: (Post) -> Void
 
     func makeUIViewController(context: Context) -> ThreadViewController {
-        ThreadViewController(
+        let controller = ThreadViewController(
             store: store,
             theme: theme,
             fontSize: fontSize,
             onOpenMedia: onOpenMedia
         )
+        controller.onTogglePostBookmark = onTogglePostBookmark
+        controller.onSaveMedia = onSaveMedia
+        return controller
     }
 
     func updateUIViewController(_ controller: ThreadViewController, context: Context) {
@@ -215,6 +220,22 @@ public struct ThreadScreen: View {
             fontSize: settings.fontSize,
             searchTerm: findQuery.isEmpty ? nil : findQuery,
             pendingScroll: $pendingScroll,
+            onTogglePostBookmark: { post in
+                let saved = store.isPostBookmarked(post.no)
+                store.setPostBookmarked(post.no, !saved)
+                if saved { ChanHaptics.warning() } else { ChanHaptics.success() }
+            },
+            onSaveMedia: { post in
+                Task {
+                    let saved = await downloader.saveSingle(
+                        board: store.board,
+                        post: post,
+                        threadNumber: store.op,
+                        environment: .shared
+                    )
+                    if saved { ChanHaptics.success() } else { ChanHaptics.error() }
+                }
+            },
             onOpenMedia: { mediaPost = $0 }
         )
         .navigationTitle("#\(store.op.value)")

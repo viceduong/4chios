@@ -295,3 +295,106 @@ final class SavedMediaTests: XCTestCase {
         try database.deleteMediaRecords(board: "g", tims: [])
     }
 }
+
+final class PostBookmarkTests: XCTestCase {
+    private var database: ChanDatabase!
+
+    override func setUpWithError() throws {
+        database = try ChanDatabase(inMemory: true)
+    }
+
+    override func tearDown() {
+        database = nil
+    }
+
+    func testPostBookmarksRoundTrip() throws {
+        try database.addPostBookmark(board: "g", postNumber: 42, threadNumber: 1)
+        try database.addPostBookmark(board: "g", postNumber: 99, threadNumber: 1)
+
+        XCTAssertTrue(try database.isPostBookmarked(board: "g", postNumber: 42))
+        XCTAssertFalse(try database.isPostBookmarked(board: "g", postNumber: 7))
+
+        let bookmarks = try database.postBookmarks()
+        XCTAssertEqual(bookmarks.count, 2)
+        XCTAssertEqual(Set(bookmarks.map(\.postNumber)), [PostNumber(42), PostNumber(99)])
+        XCTAssertTrue(bookmarks.allSatisfy { $0.threadNumber == PostNumber(1) })
+    }
+
+    func testTogglingAPostBookmarkIsIdempotent() throws {
+        try database.addPostBookmark(board: "g", postNumber: 42, threadNumber: 1)
+        try database.addPostBookmark(board: "g", postNumber: 42, threadNumber: 1)
+        XCTAssertEqual(try database.postBookmarkCount(), 1)
+
+        try database.removePostBookmark(board: "g", postNumber: 42)
+        XCTAssertEqual(try database.postBookmarkCount(), 0)
+    }
+
+    func testPostBookmarksCanBeScopedToABoard() throws {
+        try database.addPostBookmark(board: "g", postNumber: 1, threadNumber: 1)
+        try database.addPostBookmark(board: "v", postNumber: 2, threadNumber: 2)
+        XCTAssertEqual(try database.postBookmarks(board: "g").count, 1)
+        XCTAssertEqual(try database.postBookmarkCount(), 2)
+    }
+}
+
+final class BookmarkedMediaTests: XCTestCase {
+    private var database: ChanDatabase!
+
+    override func setUpWithError() throws {
+        database = try ChanDatabase(inMemory: true)
+    }
+
+    override func tearDown() {
+        database = nil
+    }
+
+    private func bulkRecord(_ tim: Int, bytes: Int = 100) -> SavedMediaRecord {
+        SavedMediaRecord(
+            board: "g", tim: tim, ext: ".jpg", postNumber: PostNumber(tim),
+            threadNumber: PostNumber(1), filename: "f\(tim)", byteCount: bytes,
+            savedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    func testBulkDownloadsAreNotBookmarks() throws {
+        try database.saveMediaRecord(bulkRecord(1))
+        XCTAssertEqual(try database.mediaRecordCount(), 1, "the file is on disk")
+        XCTAssertEqual(try database.bookmarkedMediaCount(), 0, "but it was not bookmarked")
+    }
+
+    func testBookmarkingMediaMarksItAndKeepsThreadContext() throws {
+        try database.bookmarkMedia(
+            board: "g", tim: 500, ext: ".webm", postNumber: 42, threadNumber: 1,
+            filename: "clip", byteCount: 4096
+        )
+
+        let bookmarked = try database.bookmarkedMedia()
+        XCTAssertEqual(bookmarked.count, 1)
+        XCTAssertEqual(bookmarked.first?.threadNumber, PostNumber(1))
+        XCTAssertTrue(bookmarked.first?.isBookmarked == true)
+        XCTAssertEqual(bookmarked.first?.fileName, "500.webm")
+    }
+
+    func testABulkDownloadDoesNotClearAnExistingBookmark() throws {
+        try database.bookmarkMedia(
+            board: "g", tim: 5, ext: ".jpg", postNumber: 5, threadNumber: 1,
+            filename: "f", byteCount: 10
+        )
+        // The same file later arrives via a bulk thread download.
+        try database.saveMediaRecord(bulkRecord(5, bytes: 20))
+
+        XCTAssertEqual(try database.bookmarkedMediaCount(), 1, "the marker must survive")
+        XCTAssertEqual(try database.savedMediaByteCount(board: "g"), 20, "the size is refreshed")
+    }
+
+    func testUnbookmarkingClearsTheMarkerWithoutDeletingTheFile() throws {
+        try database.bookmarkMedia(
+            board: "g", tim: 7, ext: ".jpg", postNumber: 7, threadNumber: 1,
+            filename: "f", byteCount: 10
+        )
+        try database.unbookmarkMedia(board: "g", tim: 7)
+
+        XCTAssertEqual(try database.bookmarkedMediaCount(), 0)
+        XCTAssertEqual(try database.mediaRecordCount(), 1, "removing the bookmark is not a delete")
+    }
+}

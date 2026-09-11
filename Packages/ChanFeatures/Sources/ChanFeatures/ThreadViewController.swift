@@ -14,6 +14,10 @@ public final class ThreadViewController: UIViewController {
     private let store: ThreadStore
     private let onOpenMedia: (Post) -> Void
 
+    /// Actions offered on a long press.
+    var onTogglePostBookmark: ((Post) -> Void)?
+    var onSaveMedia: ((Post) -> Void)?
+
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Section, PostNumber>!
     private var postsByNumber: [PostNumber: Post] = [:]
@@ -263,6 +267,45 @@ public final class ThreadViewController: UIViewController {
 }
 
 extension ThreadViewController: UICollectionViewDelegate {
+    /// Long press a post for the actions that apply to it alone.
+    public func collectionView(
+        _ collectionView: UICollectionView,
+        contextMenuConfigurationForItemAt indexPath: IndexPath,
+        point: CGPoint
+    ) -> UIContextMenuConfiguration? {
+        guard let number = dataSource.itemIdentifier(for: indexPath),
+              let post = postsByNumber[number] else { return nil }
+
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self else { return nil }
+
+            let saved = self.store.bookmarkedPosts.contains(number)
+            var actions: [UIMenuElement] = [
+                UIAction(
+                    title: saved ? "Remove post bookmark" : "Bookmark post",
+                    image: UIImage(systemName: saved ? "bookmark.slash" : "bookmark")
+                ) { _ in self.onTogglePostBookmark?(post) },
+            ]
+
+            if post.attachment != nil {
+                actions.append(
+                    UIAction(
+                        title: "Save media",
+                        image: UIImage(systemName: "arrow.down.circle")
+                    ) { _ in self.onSaveMedia?(post) }
+                )
+            }
+
+            actions.append(
+                UIAction(title: "Copy text", image: UIImage(systemName: "doc.on.doc")) { _ in
+                    UIPasteboard.general.string = PostHTMLParser.parse(post.commentHTML ?? "").plainText
+                }
+            )
+
+            return UIMenu(children: actions)
+        }
+    }
+
     public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         guard let number = dataSource.itemIdentifier(for: indexPath) else { return }
         try? store.markRead(upTo: number)

@@ -223,6 +223,25 @@ public final class ChanDatabase: @unchecked Sendable {
             try db.create(index: "saved_media_board", on: "saved_media", columns: ["board_id", "post_no"])
         }
 
+        // v7: individual post and media bookmarks. Media bookmarks ride on the
+        // saved_media table that bulk downloads already populate - the marker is
+        // what distinguishes "I saved this one" from "it came with the thread".
+        migrator.registerMigration("v7") { db in
+            try db.alter(table: "saved_media") { table in
+                table.add(column: "op_no", .integer)
+                table.add(column: "bookmarked_at", .double)
+            }
+
+            try db.create(table: "post_bookmark") { table in
+                table.column("board_id", .text).notNull()
+                table.column("post_no", .integer).notNull()
+                table.column("op_no", .integer).notNull()
+                table.column("added_at", .double).notNull()
+                table.primaryKey(["board_id", "post_no"])
+            }
+            try db.create(index: "post_bookmark_added", on: "post_bookmark", columns: ["added_at"])
+        }
+
         return migrator
     }
     // MARK: - JSON codec

@@ -132,6 +132,50 @@ public final class MediaDownloader: ObservableObject {
         }
     }
 
+    /// Downloads one attachment and marks it as a bookmark.
+    ///
+    /// Separate from `start` because the reader asked for this specific file:
+    /// it is not part of a bulk run, so it does not touch the batch progress.
+    @discardableResult
+    public func saveSingle(
+        board: BoardID,
+        post: Post,
+        threadNumber: PostNumber,
+        environment: AppEnvironment
+    ) async -> Bool {
+        guard let attachment = post.attachment else { return false }
+        let (_, _, ok) = await Self.fetch(
+            Pending(
+                tim: attachment.tim,
+                ext: attachment.ext,
+                fsize: attachment.size,
+                filename: attachment.filename,
+                postNumber: post.no
+            ),
+            board: board
+        )
+        guard ok,
+              let bytes = SavedMediaStore.localURL(board: board, tim: attachment.tim, ext: attachment.ext)
+                .flatMap({ try? Data(contentsOf: $0).count }) else { return false }
+
+        try? environment.database.bookmarkMedia(
+            board: board,
+            tim: attachment.tim,
+            ext: attachment.ext,
+            postNumber: post.no,
+            threadNumber: threadNumber,
+            filename: attachment.filename,
+            byteCount: bytes
+        )
+        return true
+    }
+
+    /// Removes a media bookmark and the file behind it.
+    public func removeBookmark(board: BoardID, tim: Int, ext: String, environment: AppEnvironment) {
+        try? environment.database.deleteMediaRecord(board: board, tim: tim)
+        SavedMediaStore.remove(board: board, tim: tim, ext: ext)
+    }
+
     public func cancel() {
         task?.cancel()
         task = nil
