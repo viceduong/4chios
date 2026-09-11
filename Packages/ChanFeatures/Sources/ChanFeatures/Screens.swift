@@ -107,7 +107,7 @@ public struct CatalogScreen: View {
         .background(theme.background.ignoresSafeArea())
         .background(threadLink)
         .sheet(isPresented: $showSummary) {
-            CatalogSummaryScreen(board: store.board, threads: store.posts)
+            CatalogSummaryScreen(board: store.board, threads: store.threads)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
