@@ -347,7 +347,7 @@ public struct ThreadScreen: View {
         .background(theme.background.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
                     // While a find is active the toolbar becomes its controls;
                     // there is no room for both, and find is the active task.
                     if isFinding {
@@ -370,21 +370,21 @@ public struct ThreadScreen: View {
                             Image(systemName: "magnifyingglass")
                         }
                     }
-                    // Switching view mode is a browsing action, so it keeps a
-                    // slot; summarising is an occasional task and moves into the
-                    // menu to make room.
+                    // View mode and summarising both keep a slot: one is how you
+                    // read the thread, the other is the reason you opened it. The
+                    // occasional actions stay in the menu.
                     Button {
                         mode = mode == .list ? .gallery : .list
                         ChanHaptics.tap()
                     } label: {
                         Image(systemName: mode == .gallery ? "list.bullet" : "square.grid.2x2")
                     }
+                    Button {
+                        showSummary = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
                     Menu {
-                        Button {
-                            showSummary = true
-                        } label: {
-                            Label("Summarise thread", systemImage: "sparkles")
-                        }
                         Button {
                             store.toggleWatch()
                             ChanHaptics.tap()
