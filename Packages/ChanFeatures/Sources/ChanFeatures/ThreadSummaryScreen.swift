@@ -220,10 +220,7 @@ public struct ThreadSummaryScreen: View {
                         .foregroundColor(theme.tertiaryText)
                 }
 
-                Text(turn.text)
-                    .font(.system(size: settings.fontSize))
-                    .foregroundColor(theme.primaryText)
-                    .textSelection(.enabled)
+                MarkdownText(turn.text, fontSize: settings.fontSize)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !turn.sources.isEmpty {
@@ -329,10 +326,9 @@ public struct ThreadSummaryScreen: View {
     }
 
     private func summaryText(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: settings.fontSize))
-            .foregroundColor(theme.primaryText)
-            .textSelection(.enabled)
+        // Markdown, not a plain Text: the model writes headings, lists and
+        // emphasis, and a plain Text of a String shows them verbatim.
+        MarkdownText(text, fontSize: settings.fontSize)
             .fixedSize(horizontal: false, vertical: true)
     }
 

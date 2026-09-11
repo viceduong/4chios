@@ -118,11 +118,12 @@ public struct CatalogSummaryScreen: View {
                 }
 
                 Section("Overview") {
-                    Text(summary.overview.isEmpty ? "(no overview)" : summary.overview)
-                        .font(.system(size: settings.fontSize))
-                        .foregroundColor(theme.primaryText)
-                        .textSelection(.enabled)
-                        .listRowBackground(theme.surface)
+                    MarkdownText(
+                        summary.overview.isEmpty ? "(no overview)" : summary.overview,
+                        fontSize: settings.fontSize
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(theme.surface)
                 }
 
                 if !summary.threads.isEmpty {
@@ -135,9 +136,8 @@ public struct CatalogSummaryScreen: View {
                                     Text("#\(thread.number.value)")
                                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                         .foregroundColor(theme.accent)
-                                    Text(thread.line)
-                                        .font(.subheadline)
-                                        .foregroundColor(theme.primaryText)
+                                    MarkdownText(thread.line, fontSize: 15)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .padding(.vertical, 2)
                             }
