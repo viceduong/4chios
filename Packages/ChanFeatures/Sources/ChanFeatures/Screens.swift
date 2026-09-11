@@ -32,6 +32,8 @@ struct ThreadCollectionView: UIViewControllerRepresentable {
     @ObservedObject var store: ThreadStore
     let theme: ChanTheme
     let fontSize: CGFloat
+    let searchTerm: String?
+    @Binding var pendingScroll: PostNumber?
     let onOpenMedia: (Post) -> Void
 
     func makeUIViewController(context: Context) -> ThreadViewController {
@@ -45,6 +47,13 @@ struct ThreadCollectionView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ThreadViewController, context: Context) {
         controller.applyTheme(theme, fontSize: fontSize)
+        controller.applySearch(term: searchTerm)
+
+        if let target = pendingScroll {
+            controller.scrollToPost(target)
+            // Deferred: never mutate SwiftUI state during an update pass.
+            DispatchQueue.main.async { pendingScroll = nil }
+        }
     }
 }
 
@@ -56,6 +65,7 @@ public struct CatalogScreen: View {
     @Environment(\.chanTheme) private var theme
     @State private var selected: Post?
     @State private var showComposer = false
+    @State private var query = ""
 
     public init(board: BoardID) {
         _store = StateObject(wrappedValue: CatalogStore(board: board, environment: .shared))
@@ -70,6 +80,8 @@ public struct CatalogScreen: View {
         )
         .navigationTitle("/\(store.board.rawValue)/")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: "Search threads")
+        .onChange(of: query) { store.setQuery($0) }
         .background(theme.background.ignoresSafeArea())
         .background(threadLink)
         .toolbar {
@@ -131,8 +143,19 @@ public struct CatalogScreen: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if store.threads.isEmpty, store.isLoading {
+        if store.threads.isEmpty, store.isLoading, !store.isFiltering {
             ProgressView().tint(theme.accent)
+        } else if store.threads.isEmpty, store.isFiltering {
+            VStack(spacing: ChanSpacing.s) {
+                Text("No threads match \"\(store.query)\"")
+                    .font(.subheadline)
+                    .foregroundColor(theme.secondaryText)
+                Text("Searching the threads already loaded, across subjects, post text and filenames.")
+                    .font(.caption2)
+                    .foregroundColor(theme.tertiaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(ChanSpacing.xl)
         } else if store.threads.isEmpty, let message = store.errorMessage {
             VStack(spacing: ChanSpacing.s) {
                 Text(message)
@@ -159,6 +182,10 @@ public struct ThreadScreen: View {
     @State private var mediaPost: Post?
     @State private var showComposer = false
     @State private var showSummary = false
+    @State private var findQuery = ""
+    @State private var matches: [PostNumber] = []
+    @State private var matchIndex = 0
+    @State private var pendingScroll: PostNumber?
 
     public init(board: BoardID, op: PostNumber) {
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
@@ -170,19 +197,50 @@ public struct ThreadScreen: View {
         )
     }
 
+    /// Moves through the find matches, wrapping at either end.
+    private func step(by delta: Int) {
+        guard !matches.isEmpty else { return }
+        matchIndex = (matchIndex + delta + matches.count) % matches.count
+        pendingScroll = matches[matchIndex]
+        ChanHaptics.selection()
+    }
+
     public var body: some View {
         ThreadCollectionView(
             store: store,
             theme: theme,
             fontSize: settings.fontSize,
+            searchTerm: findQuery.isEmpty ? nil : findQuery,
+            pendingScroll: $pendingScroll,
             onOpenMedia: { mediaPost = $0 }
         )
         .navigationTitle("#\(store.op.value)")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $findQuery, prompt: "Find in thread")
+        .onChange(of: findQuery) { query in
+            matches = store.search(query)
+            matchIndex = 0
+            pendingScroll = matches.first
+        }
         .background(theme.background.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
+                    // While a find is active the toolbar becomes its controls;
+                    // there is no room for both, and find is the active task.
+                    if !findQuery.isEmpty {
+                        Text("\(matchIndex + 1)/\(matches.count)")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundColor(theme.secondaryText)
+                        Button { step(by: -1) } label: {
+                            Image(systemName: "chevron.up")
+                        }
+                        .disabled(matches.isEmpty)
+                        Button { step(by: 1) } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .disabled(matches.isEmpty)
+                    } else {
                     Button {
                         showSummary = true
                     } label: {
@@ -204,6 +262,7 @@ public struct ThreadScreen: View {
                         showComposer = true
                     } label: {
                         Image(systemName: "arrowshape.turn.up.left")
+                    }
                     }
                 }
                 .tint(theme.accent)

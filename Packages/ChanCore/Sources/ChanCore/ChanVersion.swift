@@ -3,7 +3,7 @@ import Foundation
 /// Version information for the app and its data schema.
 public enum ChanVersion {
     /// Marketing version, kept in sync with `project.yml`.
-    public static let current = "0.3.1"
+    public static let current = "0.4.0"
     /// Local database schema version. Bump with every migration.
     public static let schemaVersion = 5
 }

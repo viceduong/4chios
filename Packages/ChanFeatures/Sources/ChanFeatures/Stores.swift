@@ -75,12 +75,30 @@ public final class CatalogStore: ObservableObject {
         self.sort = environment.settings.catalogSort
     }
 
+    /// The text filter as typed.
+    @Published public private(set) var query = ""
+
+    /// One lowercased haystack per thread, built once per refresh so typing costs
+    /// a dictionary lookup instead of re-parsing 200 post bodies per keystroke.
+    private var haystacks: [PostNumber: String] = [:]
+
     /// Re-orders the catalog in place.
     public func setSort(_ sort: CatalogSort) {
         guard sort != self.sort else { return }
         self.sort = sort
-        threads = sort.sorted(visible)
+        rebuild()
     }
+
+    /// Filters the catalog by text, across subject, body and filename.
+    public func setQuery(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != self.query else { return }
+        self.query = trimmed
+        rebuild()
+    }
+
+    /// True when a filter is hiding threads, so the UI can say so.
+    public var isFiltering: Bool { !query.isEmpty }
 
     /// Compiled once per load rather than once per cell.
     private var filterEngine = ChanFilterEngine(filters: [])
@@ -128,7 +146,18 @@ public final class CatalogStore: ObservableObject {
 
     private func publish(_ posts: [Post]) {
         visible = applyFilters(posts)
-        threads = sort.sorted(visible)
+        haystacks = Dictionary(
+            uniqueKeysWithValues: visible.map { ($0.no, PostSearch.haystack(for: $0)) }
+        )
+        rebuild()
+    }
+
+    private func rebuild() {
+        let needle = query.lowercased()
+        let matched = needle.isEmpty
+            ? visible
+            : visible.filter { haystacks[$0.no]?.contains(needle) == true }
+        threads = sort.sorted(matched)
     }
 
     private func applyFilters(_ posts: [Post]) -> [Post] {
@@ -284,6 +313,11 @@ public final class ThreadStore: ObservableObject {
 
     public func post(number: PostNumber) -> Post? {
         posts.first { $0.no == number }
+    }
+
+    /// Post numbers in this thread matching a query, in posting order.
+    public func search(_ query: String) -> [PostNumber] {
+        PostSearch.matches(in: posts, query: query)
     }
 
     /// Records scroll progress so the thread can be resumed later.

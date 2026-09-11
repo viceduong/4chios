@@ -20,19 +20,23 @@ public struct PostBodyRenderer {
     public let quoteAnnotations: [PostNumber: String]
     /// The quote link to emphasise — set when the user jumped here from that post.
     public let highlightedQuote: PostNumber?
+    /// A find-in-thread term to mark wherever it appears.
+    public let searchTerm: String?
 
     public init(
         theme: ChanTheme,
         fontSize: CGFloat,
         revealedSpoilers: Set<Int> = [],
         quoteAnnotations: [PostNumber: String] = [:],
-        highlightedQuote: PostNumber? = nil
+        highlightedQuote: PostNumber? = nil,
+        searchTerm: String? = nil
     ) {
         self.theme = theme
         self.fontSize = fontSize
         self.revealedSpoilers = revealedSpoilers
         self.quoteAnnotations = quoteAnnotations
         self.highlightedQuote = highlightedQuote
+        self.searchTerm = searchTerm
     }
 
     public var baseFont: UIFont { .systemFont(ofSize: fontSize) }
@@ -101,7 +105,34 @@ public struct PostBodyRenderer {
             }
         }
 
+        if let term = searchTerm, !term.isEmpty {
+            mark(term, in: output)
+        }
+
         return output
+    }
+
+    /// Marks every occurrence of a find term, so a match is visible in the post
+    /// rather than only inferred from the jump.
+    private func mark(_ term: String, in string: NSMutableAttributedString) {
+        let haystack = string.string as NSString
+        guard haystack.length > 0 else { return }
+
+        var cursor = 0
+        while cursor < haystack.length {
+            let found = haystack.range(
+                of: term,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: NSRange(location: cursor, length: haystack.length - cursor)
+            )
+            guard found.location != NSNotFound, found.length > 0 else { return }
+            string.addAttribute(
+                .backgroundColor,
+                value: UIColor(theme.accent).withAlphaComponent(0.32),
+                range: found
+            )
+            cursor = found.location + found.length
+        }
     }
 
     private func color(for style: PostStyle) -> UIColor {

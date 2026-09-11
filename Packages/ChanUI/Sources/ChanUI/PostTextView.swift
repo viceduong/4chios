@@ -22,6 +22,7 @@ public final class PostTextView: UITextView {
     private var revealedSpoilers: Set<Int> = []
     private var quoteAnnotations: [PostNumber: String] = [:]
     private var highlightedQuote: PostNumber?
+    private var searchTerm: String?
     private var theme: ChanTheme = .dark
     private var fontSize: CGFloat = 15
 
@@ -59,7 +60,8 @@ public final class PostTextView: UITextView {
         fontSize: CGFloat,
         revealedSpoilers: Set<Int> = [],
         quoteAnnotations: [PostNumber: String] = [:],
-        highlightedQuote: PostNumber? = nil
+        highlightedQuote: PostNumber? = nil,
+        searchTerm: String? = nil
     ) {
         self.body = body
         self.theme = theme
@@ -67,6 +69,7 @@ public final class PostTextView: UITextView {
         self.revealedSpoilers = revealedSpoilers
         self.quoteAnnotations = quoteAnnotations
         self.highlightedQuote = highlightedQuote
+        self.searchTerm = searchTerm
         render()
     }
 
@@ -80,7 +83,8 @@ public final class PostTextView: UITextView {
             fontSize: fontSize,
             revealedSpoilers: revealedSpoilers,
             quoteAnnotations: quoteAnnotations,
-            highlightedQuote: highlightedQuote
+            highlightedQuote: highlightedQuote,
+            searchTerm: searchTerm
         )
         attributedText = renderer.attributedString(for: body)
     }

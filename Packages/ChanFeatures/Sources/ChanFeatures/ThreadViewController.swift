@@ -24,6 +24,8 @@ public final class ThreadViewController: UIViewController {
 
     /// Stubs the user has expanded.
     private var revealedStubs: Set<PostNumber> = []
+    /// The find-in-thread term, if any.
+    private var searchTerm: String?
     /// Destination post → the post the reader came from, so the single relevant
     /// `>>` link can be highlighted.
     private var highlightTargets: [PostNumber: PostNumber] = [:]
@@ -123,7 +125,8 @@ public final class ThreadViewController: UIViewController {
                 isMine: self.store.myPosts.contains(number),
                 quotesYou: self.store.quotesUser(post),
                 isHighlighted: decision.contains(.highlight),
-                highlightedQuote: self.highlightTargets[number]
+                highlightedQuote: self.highlightTargets[number],
+                searchTerm: self.searchTerm
             )
 
             postCell.onQuoteTap = { [weak self] quoted in self?.navigate(to: quoted, from: number) }
@@ -188,6 +191,25 @@ public final class ThreadViewController: UIViewController {
         revealedStubs.insert(number)
         ChanHaptics.selection()
         reconfigure(number)
+    }
+
+    /// Scrolls to a post on request from outside, e.g. find-in-thread.
+    public func scrollToPost(_ number: PostNumber) {
+        navigate(to: number, from: nil)
+    }
+
+    /// Marks the current find term in the posts already on screen.
+    ///
+    /// Only visible cells are reconfigured: reloading a 500-post thread on every
+    /// keystroke would be far more work than the highlight is worth.
+    public func applySearch(term: String?) {
+        let normalized = (term?.isEmpty == true) ? nil : term
+        guard normalized != searchTerm else { return }
+        searchTerm = normalized
+        for indexPath in collectionView.indexPathsForVisibleItems {
+            guard let number = dataSource.itemIdentifier(for: indexPath) else { continue }
+            reconfigure(number)
+        }
     }
 
     /// Jumps to `number`, remembering `source` so the relevant quote link inside
@@ -399,7 +421,8 @@ final class PostCell: UICollectionViewCell {
         isMine: Bool,
         quotesYou: Bool,
         isHighlighted: Bool,
-        highlightedQuote: PostNumber?
+        highlightedQuote: PostNumber?,
+        searchTerm: String? = nil
     ) {
         container.backgroundColor = isHighlighted
             ? UIColor(theme.accent).withAlphaComponent(0.12)
@@ -452,7 +475,8 @@ final class PostCell: UICollectionViewCell {
             theme: theme,
             fontSize: fontSize,
             quoteAnnotations: annotations,
-            highlightedQuote: highlightedQuote
+            highlightedQuote: highlightedQuote,
+            searchTerm: searchTerm
         )
 
         backlinkRow.configure(backlinks: backlinks, annotations: annotations, theme: theme)
