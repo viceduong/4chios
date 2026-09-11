@@ -66,8 +66,13 @@ public struct MarkdownText: View {
                 Capsule()
                     .fill(theme.accent.opacity(0.6))
                     .frame(width: 3)
-                blockText(spans, size: fontSize, weight: .regular, color: theme.secondaryText)
-                    .italic()
+                blockText(
+                    spans,
+                    size: fontSize,
+                    weight: .regular,
+                    color: theme.secondaryText,
+                    italic: true
+                )
             }
 
         case .code(let code):
@@ -107,9 +112,10 @@ public struct MarkdownText: View {
         _ spans: [MarkdownSpan],
         size: CGFloat,
         weight: Font.Weight,
-        color: Color
+        color: Color,
+        italic: Bool = false
     ) -> some View {
-        Text(attributed(spans, size: size, weight: weight))
+        Text(attributed(spans, size: size, weight: weight, italic: italic))
             .font(.system(size: size, weight: weight))
             .foregroundColor(color)
             .fixedSize(horizontal: false, vertical: true)
@@ -137,15 +143,22 @@ public struct MarkdownText: View {
     /// Strikethrough is parsed but not drawn: the obvious attribute for it is not
     /// available at this deployment target, and struck-through model output is
     /// rare enough that plain text is the better trade than a second renderer.
-    private func attributed(_ spans: [MarkdownSpan], size: CGFloat, weight: Font.Weight) -> AttributedString {
+    private func attributed(
+        _ spans: [MarkdownSpan],
+        size: CGFloat,
+        weight: Font.Weight,
+        italic: Bool = false
+    ) -> AttributedString {
         var output = AttributedString()
 
         for span in spans {
             var piece = AttributedString(span.text)
 
+            // Italic is applied to the font rather than the view: View.italic()
+            // is iOS 16, Font.italic() is not.
             var font = Font.system(size: size, weight: weight)
+            if italic || span.italic { font = font.italic() }
             if span.bold { font = .system(size: size, weight: .semibold) }
-            if span.italic { font = font.italic() }
             if case .code = span.kind { font = .system(size: max(size - 1, 10), design: .monospaced) }
             piece.font = font
 
