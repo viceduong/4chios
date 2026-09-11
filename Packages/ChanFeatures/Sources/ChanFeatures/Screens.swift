@@ -71,6 +71,7 @@ public struct CatalogScreen: View {
     @State private var selected: Post?
     @State private var showComposer = false
     @State private var query = ""
+    @State private var isSearching = false
 
     public init(board: BoardID) {
         _store = StateObject(wrappedValue: CatalogStore(board: board, environment: .shared))
@@ -85,13 +86,37 @@ public struct CatalogScreen: View {
         )
         .navigationTitle("/\(store.board.rawValue)/")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: "Search threads")
+        .safeAreaInset(edge: .top) {
+            // Shown only while searching. `.searchable` cannot auto-hide over a
+            // bridged UIKit collection view, so its bar stayed pinned over the
+            // grid permanently.
+            if isSearching {
+                ChanSearchBar(
+                    placeholder: "Search threads",
+                    text: $query,
+                    onCancel: {
+                        isSearching = false
+                        query = ""
+                        store.setQuery("")
+                    }
+                )
+            }
+        }
         .onChange(of: query) { store.setQuery($0) }
         .background(theme.background.ignoresSafeArea())
         .background(threadLink)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
+                    Button {
+                        isSearching.toggle()
+                        if !isSearching {
+                            query = ""
+                            store.setQuery("")
+                        }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
                     Menu {
                         ForEach(CatalogSort.allCases) { sort in
                             Button {
@@ -191,11 +216,15 @@ public struct ThreadScreen: View {
     @State private var matches: [PostNumber] = []
     @State private var matchIndex = 0
     @State private var pendingScroll: PostNumber?
+    @State private var isFinding = false
+    /// A post to land on once the thread has loaded, e.g. from a saved post.
+    private let initialPost: PostNumber?
     @StateObject private var downloader = MediaDownloader()
     @State private var showDownloadOptions = false
     @State private var downloadOptions: [MediaDownloader.Plan] = []
 
-    public init(board: BoardID, op: PostNumber) {
+    public init(board: BoardID, op: PostNumber, initialPost: PostNumber? = nil) {
+        self.initialPost = initialPost
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
         _summaryStore = StateObject(
             wrappedValue: ThreadSummaryStore(board: board, op: op, environment: .shared)
@@ -240,7 +269,19 @@ public struct ThreadScreen: View {
         )
         .navigationTitle("#\(store.op.value)")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $findQuery, prompt: "Find in thread")
+        .safeAreaInset(edge: .top) {
+            if isFinding {
+                ChanSearchBar(
+                    placeholder: "Find in thread",
+                    text: $findQuery,
+                    onCancel: {
+                        isFinding = false
+                        findQuery = ""
+                        matches = []
+                    }
+                )
+            }
+        }
         .onChange(of: findQuery) { query in
             matches = store.search(query)
             matchIndex = 0
@@ -252,7 +293,7 @@ public struct ThreadScreen: View {
                 HStack(spacing: 16) {
                     // While a find is active the toolbar becomes its controls;
                     // there is no room for both, and find is the active task.
-                    if !findQuery.isEmpty {
+                    if isFinding {
                         Text("\(matchIndex + 1)/\(matches.count)")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundColor(theme.secondaryText)
@@ -266,36 +307,53 @@ public struct ThreadScreen: View {
                         .disabled(matches.isEmpty)
                     } else {
                     Button {
+                        isFinding = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    Button {
                         showSummary = true
                     } label: {
                         Image(systemName: "sparkles")
                     }
-                    Button {
-                        store.toggleWatch()
-                        ChanHaptics.tap()
+                    // The rest collapse into a menu: six icons do not fit, and
+                    // finding is the only one worth a permanent slot.
+                    Menu {
+                        Button {
+                            store.toggleWatch()
+                            ChanHaptics.tap()
+                        } label: {
+                            Label(
+                                store.isWatched ? "Stop watching" : "Watch thread",
+                                systemImage: store.isWatched ? "eye.slash" : "eye"
+                            )
+                        }
+                        Button {
+                            store.toggleBookmark()
+                            ChanHaptics.tap()
+                        } label: {
+                            Label(
+                                store.isBookmarked ? "Remove thread bookmark" : "Bookmark thread",
+                                systemImage: store.isBookmarked ? "bookmark.slash" : "bookmark"
+                            )
+                        }
+                        Button {
+                            showComposer = true
+                        } label: {
+                            Label("Reply", systemImage: "arrowshape.turn.up.left")
+                        }
+                        Button {
+                            downloadOptions = downloader.plans(
+                                board: store.board,
+                                posts: store.posts,
+                                environment: .shared
+                            )
+                            showDownloadOptions = true
+                        } label: {
+                            Label("Download media", systemImage: "arrow.down.circle")
+                        }
                     } label: {
-                        Image(systemName: store.isWatched ? "eye.fill" : "eye")
-                    }
-                    Button {
-                        store.toggleBookmark()
-                        ChanHaptics.tap()
-                    } label: {
-                        Image(systemName: store.isBookmarked ? "bookmark.fill" : "bookmark")
-                    }
-                    Button {
-                        showComposer = true
-                    } label: {
-                        Image(systemName: "arrowshape.turn.up.left")
-                    }
-                    Button {
-                        downloadOptions = downloader.plans(
-                            board: store.board,
-                            posts: store.posts,
-                            environment: .shared
-                        )
-                        showDownloadOptions = true
-                    } label: {
-                        Image(systemName: "arrow.down.circle")
+                        Image(systemName: "ellipsis.circle")
                     }
                     }
                 }
@@ -340,6 +398,9 @@ public struct ThreadScreen: View {
         }
         .task {
             await store.loadIfNeeded()
+            // Only after the posts exist, otherwise the scroll request would be
+            // dropped before the cell it targets is in the snapshot.
+            if let initialPost { pendingScroll = initialPost }
             store.refreshUserState()
 
             // Live thread: poll the tail endpoint while the screen is visible.
@@ -575,5 +636,57 @@ private struct DownloadProgressBar: View {
         .padding(.horizontal, ChanSpacing.m)
         .padding(.vertical, ChanSpacing.s)
         .background(.bar)
+    }
+}
+
+/// An explicit search field, shown only while a search is active.
+///
+/// Used instead of `.searchable` because a SwiftUI search bar cannot detect the
+/// scroll view inside a bridged UIKit collection view, so it never auto-hides
+/// and stayed pinned over the content permanently.
+struct ChanSearchBar: View {
+    let placeholder: String
+    @Binding var text: String
+    let onCancel: () -> Void
+
+    @Environment(\.chanTheme) private var theme
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: ChanSpacing.s) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13))
+                    .foregroundColor(theme.tertiaryText)
+
+                TextField(placeholder, text: $text)
+                    .focused($focused)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .submitLabel(.search)
+
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.tertiaryText)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(theme.elevated)
+            .clipShape(RoundedRectangle(cornerRadius: ChanRadius.small, style: .continuous))
+
+            Button("Cancel") { onCancel() }
+                .font(.footnote.weight(.semibold))
+                .tint(theme.accent)
+        }
+        .padding(.horizontal, ChanSpacing.m)
+        .padding(.vertical, ChanSpacing.s)
+        .background(.bar)
+        .onAppear { focused = true }
     }
 }

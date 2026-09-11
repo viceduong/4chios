@@ -23,22 +23,17 @@ public struct SavedScreen: View {
 
     @StateObject private var store = SavedStore(environment: .shared)
     @State private var category: Category = .threads
+    @State private var viewingMedia: SavedMediaItem?
 
     @Environment(\.chanTheme) private var theme
 
     public init() {}
 
     public var body: some View {
-        List {
-            switch category {
-            case .threads: threadSections
-            case .posts: postSection
-            case .media: mediaSection
-            }
-        }
-        .listStyle(.plain)
-        .navigationTitle("Saved")
-        .safeAreaInset(edge: .top) {
+        // The picker sits above the list rather than in a safe-area inset: an
+        // inset floats over the scroll view, so the list's own content slid
+        // under it and the two overlapped.
+        VStack(spacing: 0) {
             Picker("Category", selection: $category) {
                 ForEach(Category.allCases) { category in
                     Text(category.label).tag(category)
@@ -47,10 +42,24 @@ public struct SavedScreen: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, ChanSpacing.l)
             .padding(.vertical, ChanSpacing.s)
-            .background(.bar)
+            .background(theme.background)
+
+            List {
+                switch category {
+                case .threads: threadSections
+                case .posts: postSection
+                case .media: mediaSection
+                }
+            }
+            .listStyle(.plain)
         }
+        .navigationTitle("Saved")
         .onAppear { store.load() }
         .refreshable { store.load() }
+        .sheet(item: $viewingMedia) { item in
+            SavedMediaViewerScreen(item: item)
+                .environment(\.chanTheme, theme)
+        }
     }
 
     // MARK: - Threads
@@ -126,7 +135,13 @@ public struct SavedScreen: View {
         } else {
             Section("Posts") {
                 ForEach(store.posts) { post in
-                    NavigationLink(destination: ThreadScreen(board: post.board, op: post.threadNumber)) {
+                    NavigationLink(
+                        destination: ThreadScreen(
+                            board: post.board,
+                            op: post.threadNumber,
+                            initialPost: post.postNumber
+                        )
+                    ) {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 boardTag(post.board)
@@ -177,9 +192,12 @@ public struct SavedScreen: View {
         } else {
             Section {
                 ForEach(store.media) { item in
-                    NavigationLink(destination: ThreadScreen(board: item.board, op: item.threadNumber ?? item.postNumber)) {
+                    Button {
+                        viewingMedia = item
+                    } label: {
                         mediaRow(item)
                     }
+                    .buttonStyle(.plain)
                     .listRowBackground(theme.surface)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
