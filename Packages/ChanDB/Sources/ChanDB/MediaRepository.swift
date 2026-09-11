@@ -153,7 +153,7 @@ public extension ChanDatabase {
             tim: row["tim"],
             ext: row["ext"],
             postNumber: PostNumber(row["post_no"]),
-            threadNumber: threadNumber.map(PostNumber.init),
+            threadNumber: threadNumber.map { PostNumber($0) },
             filename: row["filename"],
             byteCount: row["byte_count"],
             savedAt: Date(timeIntervalSince1970: row["saved_at"]),
