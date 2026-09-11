@@ -30,18 +30,6 @@ public final class ThreadChatStore: ObservableObject {
         environment.settings.canSearchTheWeb
     }
 
-    /// True when search only runs if the reader asks for it.
-    ///
-    /// With a direct provider or the server tool, search is always offered and
-    /// costs nothing unless the model uses it, so there is nothing to toggle.
-    /// The plugin is the one path that needs opting into, because it searches on
-    /// every message it is attached to.
-    public var searchNeedsOptIn: Bool {
-        let configuration = environment.settings.aiConfiguration
-        guard configuration.directSearch?.isConfigured != true else { return false }
-        return configuration.search?.mode == .plugin
-    }
-
     public var isConfigured: Bool {
         environment.settings.isAIConfigured
     }
@@ -62,9 +50,7 @@ public final class ThreadChatStore: ObservableObject {
         )
     }
 
-    /// `forceSearch` overrides the model's judgement for one message, so the
-    /// reader does not have to phrase the question to get a lookup.
-    public func ask(_ question: String, forceSearch: Bool = false) {
+    public func ask(_ question: String) {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAsking else { return }
         guard isConfigured else {
@@ -82,7 +68,7 @@ public final class ThreadChatStore: ObservableObject {
         isAsking = true
         persist()
 
-        let searching = forceSearch || useWebSearch
+        let searching = useWebSearch
 
         task = Task { [weak self] in
             guard let self else { return }

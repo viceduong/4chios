@@ -52,14 +52,6 @@ public struct ThreadSummaryScreen: View {
                             notice(message, color: theme.danger)
                         }
 
-                        // Only while the conversation is empty, so it teaches
-                        // once instead of nagging.
-                        if chat.turns.isEmpty, chat.canSearch {
-                            Text("Hold the send button to force a web search for one question.")
-                                .font(.caption2)
-                                .foregroundColor(theme.tertiaryText)
-                        }
-
                         // Scroll target, so new answers come into view.
                         Color.clear.frame(height: 1).id(bottomAnchor)
                     }
@@ -145,9 +137,7 @@ public struct ThreadSummaryScreen: View {
 
     private var composer: some View {
         HStack(spacing: ChanSpacing.s) {
-            // Only shown when it actually changes what happens. Search is
-            // always available otherwise, so a toggle would be decoration.
-            if chat.canSearch, chat.searchNeedsOptIn {
+            if chat.canSearch {
                 Button {
                     chat.useWebSearch.toggle()
                     ChanHaptics.tap()
@@ -159,7 +149,7 @@ public struct ThreadSummaryScreen: View {
                         .background(chat.useWebSearch ? theme.accent : Color.clear)
                         .clipShape(Circle())
                 }
-                .accessibilityLabel(chat.useWebSearch ? "Search every message" : "Search only when asked")
+                .accessibilityLabel(chat.useWebSearch ? "Web search on" : "Web search off")
             }
 
             TextField("Ask about this thread", text: $draft)
@@ -171,9 +161,13 @@ public struct ThreadSummaryScreen: View {
                 .background(theme.elevated)
                 .clipShape(RoundedRectangle(cornerRadius: ChanRadius.large, style: .continuous))
 
-            SendButton(canSend: canSend, theme: theme) { forceSearch in
-                send(forceSearch: forceSearch)
+            Button(action: send) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundColor(canSend ? theme.accent : theme.tertiaryText)
             }
+            .disabled(!canSend)
+            .accessibilityLabel("Send")
         }
         .padding(.horizontal, ChanSpacing.l)
         .padding(.vertical, ChanSpacing.s)
@@ -184,12 +178,12 @@ public struct ThreadSummaryScreen: View {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !chat.isAsking
     }
 
-    private func send(forceSearch: Bool = false) {
+    private func send() {
         guard canSend else { return }
         let question = draft
         draft = ""
         ChanHaptics.tap()
-        chat.ask(question, forceSearch: forceSearch)
+        chat.ask(question)
     }
 
     // MARK: - Conversation
@@ -362,46 +356,5 @@ public struct ThreadSummaryScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(color.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: ChanRadius.small, style: .continuous))
-    }
-}
-
-/// Send, and send-with-a-search.
-///
-/// A quick tap sends normally and lets the model decide. Holding the button
-/// arms an override for that one message; the icon becomes a globe the moment
-/// it is armed, so the reader sees the override before it happens, and it
-/// resets afterwards — there is no standing toggle to misread as "search off".
-private struct SendButton: View {
-    let canSend: Bool
-    let theme: ChanTheme
-    let onSend: (Bool) -> Void
-
-    @State private var isPressing = false
-    @State private var didForce = false
-
-    var body: some View {
-        Image(systemName: didForce ? "globe.circle.fill" : "arrow.up.circle.fill")
-            .font(.system(size: 26))
-            .foregroundColor(canSend ? theme.accent : theme.tertiaryText)
-            .scaleEffect(isPressing ? 1.15 : 1)
-            .animation(.spring(response: 0.22, dampingFraction: 0.6), value: isPressing)
-            .animation(.spring(response: 0.22, dampingFraction: 0.6), value: didForce)
-            .contentShape(Circle())
-            .onLongPressGesture(minimumDuration: 0.35, maximumDistance: 40) {
-                guard canSend else { return }
-                didForce = true
-                onSend(true)
-            } onPressingChanged: { pressing in
-                isPressing = pressing
-                guard !pressing else { return }
-                // Keep the guard briefly so the release does not also send normally.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { didForce = false }
-            }
-            .onTapGesture {
-                guard canSend, !didForce else { return }
-                onSend(false)
-            }
-            .accessibilityLabel("Send")
-            .accessibilityHint("Hold to force a web search")
     }
 }
