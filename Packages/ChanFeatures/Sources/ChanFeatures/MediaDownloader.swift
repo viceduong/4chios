@@ -1,5 +1,6 @@
 import ChanAPI
 import ChanCore
+import ChanDB
 import Foundation
 
 /// Downloads a thread's media for offline viewing.
