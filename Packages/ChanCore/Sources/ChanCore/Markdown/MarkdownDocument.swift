@@ -254,9 +254,12 @@ public enum MarkdownDocument {
             return count
         }
 
-        func hasCloser(_ marker: Character, after position: String.Index) -> Bool {
-            guard let start = text.index(position, offsetBy: 1, limitedBy: text.endIndex) else { return false }
-            return text[start...].contains(marker)
+        /// Whether a closing marker exists from this position on.
+        ///
+        /// Only used to decide whether a marker *opens*; a marker that closes
+        /// something already open needs no lookahead.
+        func hasCloser(_ marker: Character, from position: String.Index) -> Bool {
+            position < text.endIndex && text[position...].contains(marker)
         }
 
         /// `_` is only a marker at a word boundary, so identifiers such as
@@ -295,12 +298,15 @@ public enum MarkdownDocument {
                 continue
             }
 
-            if character == "~", text[index...].hasPrefix("~~"),
-               hasCloser("~", after: text.index(after: index)) {
-                flush()
-                strikethrough.toggle()
-                index = text.index(index, offsetBy: 2)
-                continue
+            if character == "~", text[index...].hasPrefix("~~") {
+                let consumed = text.index(index, offsetBy: 2)
+                // Already open means this run closes it, whatever follows.
+                if strikethrough || hasCloser("~", from: consumed) {
+                    flush()
+                    strikethrough.toggle()
+                    index = consumed
+                    continue
+                }
             }
 
             if character == "*" || character == "_" {
@@ -325,7 +331,7 @@ public enum MarkdownDocument {
                         index = consumed
                         continue
                     }
-                    if hasCloser(character, after: index) {
+                    if hasCloser(character, from: consumed) {
                         flush()
                         if count >= 2 {
                             bold = true
