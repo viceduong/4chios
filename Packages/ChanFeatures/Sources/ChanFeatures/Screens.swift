@@ -209,7 +209,8 @@ public struct ThreadScreen: View {
     @StateObject private var chatStore: ThreadChatStore
     @ObservedObject private var settings = AppEnvironment.shared.settings
     @Environment(\.chanTheme) private var theme
-    @State private var mediaPost: Post?
+    @State private var mode: ThreadMode = .list
+    @State private var viewer: ViewerRequest?
     @State private var showComposer = false
     @State private var showSummary = false
     @State private var findQuery = ""
@@ -242,8 +243,30 @@ public struct ThreadScreen: View {
         ChanHaptics.selection()
     }
 
+    /// The thread's attachments in reading order, which is both the order the
+    /// mosaic shows them in and the order the viewer pages through.
+    private var galleryItems: [ThreadGalleryItem] {
+        store.posts.compactMap { post in
+            post.attachment.map { ThreadGalleryItem(postNumber: post.no, attachment: $0) }
+        }
+    }
+
+    /// Opening from the list shows that one file. Paging into other posts'
+    /// attachments from there would be a surprise, so the pager is reserved for
+    /// the gallery, where the whole set is visible and the context is obvious.
+    private func openInViewer(_ post: Post) {
+        guard let attachment = post.attachment else { return }
+        viewer = ViewerRequest(
+            items: [ThreadGalleryItem(postNumber: post.no, attachment: attachment)],
+            index: 0
+        )
+    }
+
     public var body: some View {
-        ThreadCollectionView(
+        ZStack {
+            // Left in the hierarchy while the mosaic is showing, so switching
+            // back does not throw away the reader's place in the thread.
+            ThreadCollectionView(
             store: store,
             theme: theme,
             fontSize: settings.fontSize,
@@ -265,8 +288,21 @@ public struct ThreadScreen: View {
                     if saved { ChanHaptics.success() } else { ChanHaptics.error() }
                 }
             },
-            onOpenMedia: { mediaPost = $0 }
+            onOpenMedia: { openInViewer($0) }
         )
+            .opacity(mode == .list ? 1 : 0)
+            .allowsHitTesting(mode == .list)
+
+            if mode == .gallery {
+                ThreadGalleryView(
+                    board: store.board,
+                    items: galleryItems,
+                    onOpen: { index in
+                        viewer = ViewerRequest(items: galleryItems, index: index)
+                    }
+                )
+            }
+        }
         .navigationTitle("#\(store.op.value)")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
@@ -306,19 +342,28 @@ public struct ThreadScreen: View {
                         }
                         .disabled(matches.isEmpty)
                     } else {
-                    Button {
-                        isFinding = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
+                    if mode == .list {
+                        Button {
+                            isFinding = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
                     }
+                    // Switching view mode is a browsing action, so it keeps a
+                    // slot; summarising is an occasional task and moves into the
+                    // menu to make room.
                     Button {
-                        showSummary = true
+                        mode = mode == .list ? .gallery : .list
+                        ChanHaptics.tap()
                     } label: {
-                        Image(systemName: "sparkles")
+                        Image(systemName: mode == .gallery ? "list.bullet" : "square.grid.2x2")
                     }
-                    // The rest collapse into a menu: six icons do not fit, and
-                    // finding is the only one worth a permanent slot.
                     Menu {
+                        Button {
+                            showSummary = true
+                        } label: {
+                            Label("Summarise thread", systemImage: "sparkles")
+                        }
                         Button {
                             store.toggleWatch()
                             ChanHaptics.tap()
@@ -410,8 +455,8 @@ public struct ThreadScreen: View {
                 await store.pollForNewPosts()
             }
         }
-        .sheet(item: $mediaPost) { post in
-            MediaViewerScreen(board: store.board, post: post)
+        .sheet(item: $viewer) { request in
+            MediaViewerScreen(board: store.board, items: request.items, start: request.index)
         }
     }
 }
@@ -420,43 +465,88 @@ public struct ThreadScreen: View {
 
 public struct MediaViewerScreen: View {
     public let board: BoardID
-    public let post: Post
+    /// One file when opened from a post, the whole thread when opened from the
+    /// gallery. More than one is what makes the viewer pageable.
+    let items: [ThreadGalleryItem]
 
+    @State private var index: Int
     @Environment(\.chanTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     public init(board: BoardID, post: Post) {
         self.board = board
-        self.post = post
+        self.items = post.attachment.map {
+            [ThreadGalleryItem(postNumber: post.no, attachment: $0)]
+        } ?? []
+        _index = State(initialValue: 0)
+    }
+
+    init(board: BoardID, items: [ThreadGalleryItem], start: Int) {
+        self.board = board
+        self.items = items
+        _index = State(initialValue: items.isEmpty ? 0 : min(max(start, 0), items.count - 1))
+    }
+
+    private var current: ThreadGalleryItem? {
+        items.indices.contains(index) ? items[index] : nil
     }
 
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let attachment = post.attachment {
-                if attachment.isVideo {
-                    videoView(attachment)
-                } else if attachment.isAnimated {
-                    ChanGIFImage(url: mediaURL(for: attachment))
-                } else {
-                    ZoomableImageView(url: mediaURL(for: attachment))
+            if items.count > 1 {
+                TabView(selection: $index) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
+                        page(item).tag(offset)
+                    }
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            } else if let item = items.first {
+                page(item)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .padding(ChanSpacing.l)
-        }
+        .overlay(alignment: .topTrailing) { closeButton }
+        .overlay(alignment: .topLeading) { counter }
         .overlay(alignment: .bottom) { caption }
+    }
+
+    @ViewBuilder
+    private func page(_ item: ThreadGalleryItem) -> some View {
+        let attachment = item.attachment
+        if attachment.isVideo {
+            videoView(attachment)
+        } else if attachment.isAnimated {
+            ChanGIFImage(url: mediaURL(for: attachment))
+        } else {
+            ZoomableImageView(url: mediaURL(for: attachment))
+        }
+    }
+
+    @ViewBuilder
+    private var counter: some View {
+        if items.count > 1 {
+            Text("\(index + 1) of \(items.count)")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(ChanSpacing.l)
+        }
+    }
+
+    private var closeButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(.white)
+                .padding(10)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .padding(ChanSpacing.l)
     }
 
     /// Prefers the downloaded copy, so a saved thread opens offline.
@@ -495,7 +585,7 @@ public struct MediaViewerScreen: View {
 
     @ViewBuilder
     private var caption: some View {
-        if let attachment = post.attachment {
+        if let attachment = current?.attachment {
             VStack(spacing: 2) {
                 Text(attachment.filename)
                     .font(.footnote.weight(.semibold))
@@ -689,4 +779,18 @@ struct ChanSearchBar: View {
         .background(.bar)
         .onAppear { focused = true }
     }
+}
+
+/// Which representation of a thread is showing.
+enum ThreadMode {
+    case list
+    case gallery
+}
+
+/// A viewer presentation: one file from the list, or the whole thread from the
+/// gallery. `items` carries the ordered set so the viewer can page through it.
+struct ViewerRequest: Identifiable {
+    let id = UUID()
+    let items: [ThreadGalleryItem]
+    let index: Int
 }
