@@ -35,8 +35,11 @@ public struct MarkdownText: UIViewRepresentable {
         view.dataDetectorTypes = []
         view.adjustsFontForContentSizeCategory = true
         view.isSelectable = true
-        // Without this the view collapses to nothing inside a scroll view.
+        view.textContainer.widthTracksTextView = true
+        // Without these the view collapses to nothing inside a scroll view, or
+        // takes the full height of its container instead of its own text.
         view.setContentCompressionResistancePriority(.required, for: .vertical)
+        view.setContentHuggingPriority(.required, for: .vertical)
         return view
     }
 

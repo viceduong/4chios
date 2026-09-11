@@ -122,7 +122,6 @@ public struct CatalogSummaryScreen: View {
                         summary.overview.isEmpty ? "(no overview)" : summary.overview,
                         fontSize: settings.fontSize
                     )
-                    .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(theme.surface)
                 }
 
@@ -137,7 +136,6 @@ public struct CatalogSummaryScreen: View {
                                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                         .foregroundColor(theme.accent)
                                     MarkdownText(thread.line, fontSize: 15)
-                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .padding(.vertical, 2)
                             }

@@ -221,7 +221,6 @@ public struct ThreadSummaryScreen: View {
                 }
 
                 MarkdownText(turn.text, fontSize: settings.fontSize)
-                    .fixedSize(horizontal: false, vertical: true)
 
                 if !turn.sources.isEmpty {
                     sources(turn.sources)
@@ -329,7 +328,6 @@ public struct ThreadSummaryScreen: View {
         // Markdown, not a plain Text: the model writes headings, lists and
         // emphasis, and a plain Text of a String shows them verbatim.
         MarkdownText(text, fontSize: settings.fontSize)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func footer(_ summary: ThreadSummary) -> some View {

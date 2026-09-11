@@ -18,6 +18,14 @@ public struct SettingsScreen: View {
         self.settings = settings
     }
 
+    /// Version and build together. The version alone cannot tell two builds of
+    /// the same release apart, which is what makes "am I running the fix?"
+    /// answerable from the app rather than from the release notes.
+    private var buildStamp: String {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(ChanVersion.current) (\(build))"
+    }
+
     public var body: some View {
         NavigationView {
             Form {
@@ -279,7 +287,7 @@ public struct SettingsScreen: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text(ChanVersion.current).foregroundColor(theme.secondaryText)
+                        Text(buildStamp).foregroundColor(theme.secondaryText)
                     }
                     HStack {
                         Text("Schema")
