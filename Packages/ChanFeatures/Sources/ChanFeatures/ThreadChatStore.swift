@@ -62,7 +62,9 @@ public final class ThreadChatStore: ObservableObject {
         )
     }
 
-    public func ask(_ question: String) {
+    /// `forceSearch` overrides the model's judgement for one message, so the
+    /// reader does not have to phrase the question to get a lookup.
+    public func ask(_ question: String, forceSearch: Bool = false) {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAsking else { return }
         guard isConfigured else {
@@ -80,7 +82,7 @@ public final class ThreadChatStore: ObservableObject {
         isAsking = true
         persist()
 
-        let searching = useWebSearch
+        let searching = forceSearch || useWebSearch
 
         task = Task { [weak self] in
             guard let self else { return }
