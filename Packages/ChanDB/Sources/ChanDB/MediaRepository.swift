@@ -12,6 +12,24 @@ public struct SavedMediaRecord: Hashable, Sendable {
     public let byteCount: Int
     public let savedAt: Date
 
+    public init(
+        board: BoardID,
+        tim: Int,
+        ext: String,
+        postNumber: PostNumber,
+        filename: String,
+        byteCount: Int,
+        savedAt: Date
+    ) {
+        self.board = board
+        self.tim = tim
+        self.ext = ext
+        self.postNumber = postNumber
+        self.filename = filename
+        self.byteCount = byteCount
+        self.savedAt = savedAt
+    }
+
     public var fileName: String {
         "\(tim)\(ext.hasPrefix(".") ? ext : ".\(ext)")"
     }
