@@ -7,6 +7,8 @@ import SwiftUI
 public struct SettingsScreen: View {
     @ObservedObject var settings: ChanSettings
     @ObservedObject private var usage = AppEnvironment.shared.usage
+    @State private var savedMediaBytes = 0
+    @State private var savedMediaFiles = 0
 
     @Environment(\.chanTheme) private var theme
     @Environment(\.dismiss) private var dismiss
@@ -142,6 +144,35 @@ public struct SettingsScreen: View {
                         .foregroundColor(theme.secondaryText)
                 }
 
+                Section("Offline media") {
+                    HStack {
+                        Text("Downloaded")
+                        Spacer()
+                        Text(ChanFormat.bytes(savedMediaBytes))
+                            .foregroundColor(theme.secondaryText)
+                    }
+                    HStack {
+                        Text("Files")
+                        Spacer()
+                        Text("\(savedMediaFiles)")
+                            .foregroundColor(theme.secondaryText)
+                    }
+                    if savedMediaBytes > 0 {
+                        Button(role: .destructive) {
+                            try? AppEnvironment.shared.database.deleteAllMediaRecords()
+                            try? SavedMediaStore.delete()
+                            savedMediaBytes = 0
+                            savedMediaFiles = 0
+                            ChanHaptics.warning()
+                        } label: {
+                            Text("Delete all downloaded media")
+                        }
+                    }
+                    Text("Thread text is saved automatically when you bookmark. Media is downloaded only when you ask for it, from the download button in a thread.")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+                }
+
                 Section("AI usage") {
                     HStack {
                         Text("Tokens used")
@@ -260,6 +291,10 @@ public struct SettingsScreen: View {
                         .font(.caption)
                         .foregroundColor(theme.secondaryText)
                 }
+            }
+            .onAppear {
+                savedMediaBytes = SavedMediaStore.bytesOnDisk()
+                savedMediaFiles = (try? AppEnvironment.shared.database.mediaRecordCount()) ?? 0
             }
             .task {
                 await usage.refreshSearchBalance(

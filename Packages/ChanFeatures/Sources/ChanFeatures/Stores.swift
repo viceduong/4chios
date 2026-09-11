@@ -340,6 +340,9 @@ public final class ThreadStore: ObservableObject {
             try? environment.database.removeBookmark(board: board, op: op)
         } else {
             try? environment.database.addBookmark(board: board, op: op)
+            // A bookmarked thread is kept for offline reading, so fetch the whole
+            // thing rather than only the part that was scrolled past.
+            Task { await self.refresh() }
         }
         refreshUserState()
     }

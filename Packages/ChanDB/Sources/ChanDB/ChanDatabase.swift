@@ -208,6 +208,21 @@ public final class ChanDatabase: @unchecked Sendable {
             }
         }
 
+        // v6: which media files have been downloaded for offline viewing.
+        migrator.registerMigration("v6") { db in
+            try db.create(table: "saved_media") { table in
+                table.column("board_id", .text).notNull()
+                table.column("tim", .integer).notNull()
+                table.column("ext", .text).notNull()
+                table.column("post_no", .integer).notNull()
+                table.column("filename", .text).notNull()
+                table.column("byte_count", .integer).notNull()
+                table.column("saved_at", .double).notNull()
+                table.primaryKey(["board_id", "tim"])
+            }
+            try db.create(index: "saved_media_board", on: "saved_media", columns: ["board_id", "post_no"])
+        }
+
         return migrator
     }
     // MARK: - JSON codec

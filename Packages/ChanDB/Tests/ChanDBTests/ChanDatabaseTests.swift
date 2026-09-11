@@ -229,3 +229,69 @@ final class ChanDatabaseTests: XCTestCase {
         XCTAssertEqual(try database.myPostNumbers(board: "g"), [PostNumber(5)])
     }
 }
+
+final class SavedMediaTests: XCTestCase {
+    private var database: ChanDatabase!
+
+    override func setUpWithError() throws {
+        database = try ChanDatabase(inMemory: true)
+    }
+
+    override func tearDown() {
+        database = nil
+    }
+
+    private func record(_ tim: Int, post: Int, bytes: Int, ext: String = ".jpg") -> SavedMediaRecord {
+        SavedMediaRecord(
+            board: "g", tim: tim, ext: ext, postNumber: PostNumber(post),
+            filename: "file\(tim)", byteCount: bytes, savedAt: Date(timeIntervalSince1970: TimeInterval(tim))
+        )
+    }
+
+    func testMediaRecordsRoundTrip() throws {
+        try database.saveMediaRecord(record(111, post: 1, bytes: 2048))
+        try database.saveMediaRecord(record(222, post: 2, bytes: 4096, ext: ".webm"))
+
+        let saved = try database.savedMedia(board: "g")
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved.first?.fileName, "111.jpg", "the on-disk name is tim + ext")
+        XCTAssertEqual(saved.last?.fileName, "222.webm")
+        XCTAssertEqual(try database.savedMediaTimestamps(board: "g"), [111, 222])
+    }
+
+    func testReSavingUpdatesRatherThanDuplicating() throws {
+        try database.saveMediaRecord(record(111, post: 1, bytes: 100))
+        try database.saveMediaRecord(record(111, post: 1, bytes: 200))
+        XCTAssertEqual(try database.mediaRecordCount(board: "g"), 1)
+        XCTAssertEqual(try database.savedMediaByteCount(board: "g"), 200)
+    }
+
+    func testByteCountsAggregatePerBoardAndOverall() throws {
+        try database.saveMediaRecord(record(1, post: 1, bytes: 1000))
+        try database.saveMediaRecord(record(2, post: 1, bytes: 500))
+        try database.saveMediaRecord(
+            SavedMediaRecord(board: "v", tim: 3, ext: ".png", postNumber: 1,
+                             filename: "f", byteCount: 250, savedAt: Date())
+        )
+
+        XCTAssertEqual(try database.savedMediaByteCount(board: "g"), 1500)
+        XCTAssertEqual(try database.savedMediaByteCount(), 1750)
+        XCTAssertEqual(try database.mediaRecordCount(), 3)
+    }
+
+    func testDeletingSelectedAndEverything() throws {
+        try database.saveMediaRecord(record(1, post: 1, bytes: 10))
+        try database.saveMediaRecord(record(2, post: 1, bytes: 10))
+        try database.deleteMediaRecords(board: "g", tims: [1])
+        XCTAssertEqual(try database.savedMediaTimestamps(board: "g"), [2])
+
+        try database.deleteAllMediaRecords()
+        XCTAssertEqual(try database.mediaRecordCount(), 0)
+    }
+
+    func testEmptyBoardIsHandled() throws {
+        XCTAssertTrue(try database.savedMedia(board: "g").isEmpty)
+        XCTAssertEqual(try database.savedMediaByteCount(board: "g"), 0)
+        try database.deleteMediaRecords(board: "g", tims: [])
+    }
+}

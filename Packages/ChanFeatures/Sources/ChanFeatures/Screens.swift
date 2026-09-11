@@ -186,6 +186,9 @@ public struct ThreadScreen: View {
     @State private var matches: [PostNumber] = []
     @State private var matchIndex = 0
     @State private var pendingScroll: PostNumber?
+    @StateObject private var downloader = MediaDownloader()
+    @State private var showDownloadOptions = false
+    @State private var downloadOptions: [MediaDownloader.Plan] = []
 
     public init(board: BoardID, op: PostNumber) {
         _store = StateObject(wrappedValue: ThreadStore(board: board, op: op, environment: .shared))
@@ -263,6 +266,16 @@ public struct ThreadScreen: View {
                     } label: {
                         Image(systemName: "arrowshape.turn.up.left")
                     }
+                    Button {
+                        downloadOptions = downloader.plans(
+                            board: store.board,
+                            posts: store.posts,
+                            environment: .shared
+                        )
+                        showDownloadOptions = true
+                    } label: {
+                        Image(systemName: "arrow.down.circle")
+                    }
                     }
                 }
                 .tint(theme.accent)
@@ -278,6 +291,31 @@ public struct ThreadScreen: View {
         }) {
             ThreadSummaryScreen(store: summaryStore, chat: chatStore, posts: store.posts)
                 .environment(\.chanTheme, theme)
+        }
+        .confirmationDialog(
+            "Download media for offline viewing",
+            isPresented: $showDownloadOptions,
+            titleVisibility: .visible
+        ) {
+            ForEach(downloadOptions) { plan in
+                Button(plan.label) {
+                    downloader.start(
+                        board: store.board,
+                        posts: store.posts,
+                        kind: plan.kind,
+                        environment: .shared
+                    )
+                }
+                .disabled(plan.isEmpty)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Already-downloaded files are skipped, so an interrupted download resumes by running it again. Thread text is saved automatically when you bookmark.")
+        }
+        .safeAreaInset(edge: .top) {
+            if downloader.isRunning {
+                DownloadProgressBar(progress: downloader.progress) { downloader.cancel() }
+            }
         }
         .task {
             await store.loadIfNeeded()
@@ -318,9 +356,9 @@ public struct MediaViewerScreen: View {
                 if attachment.isVideo {
                     videoView(attachment)
                 } else if attachment.isAnimated {
-                    ChanGIFImage(url: ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext))
+                    ChanGIFImage(url: mediaURL(for: attachment))
                 } else {
-                    ZoomableImageView(url: ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext))
+                    ZoomableImageView(url: mediaURL(for: attachment))
                 }
             }
         }
@@ -339,9 +377,15 @@ public struct MediaViewerScreen: View {
         .overlay(alignment: .bottom) { caption }
     }
 
+    /// Prefers the downloaded copy, so a saved thread opens offline.
+    private func mediaURL(for attachment: Attachment) -> URL {
+        SavedMediaStore.localURL(board: board, tim: attachment.tim, ext: attachment.ext)
+            ?? ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext)
+    }
+
     @ViewBuilder
     private func videoView(_ attachment: Attachment) -> some View {
-        let url = ChanMediaURL.full(board: board, tim: attachment.tim, ext: attachment.ext)
+        let url = mediaURL(for: attachment)
         if attachment.ext.lowercased().contains("mp4") {
             NativeVideoPlayer(url: url)
         } else {
@@ -472,5 +516,43 @@ struct NativeVideoPlayer: View {
         .onDisappear {
             player?.pause()
         }
+    }
+}
+
+/// A thin bar above the timeline while media downloads.
+private struct DownloadProgressBar: View {
+    let progress: MediaDownloader.Progress
+    let onCancel: () -> Void
+
+    @Environment(\.chanTheme) private var theme
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: ChanSpacing.s) {
+                ProgressView(value: progress.fraction)
+                    .tint(theme.accent)
+                Text(progress.summary)
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
+                    .fixedSize()
+                Button {
+                    ChanHaptics.tap()
+                    onCancel()
+                } label: {
+                    Text("Stop")
+                        .font(.caption2.weight(.semibold))
+                }
+                .tint(theme.danger)
+            }
+            if progress.bytes > 0 {
+                Text("\(ChanFormat.bytes(progress.bytes)) downloaded")
+                    .font(.caption2)
+                    .foregroundColor(theme.tertiaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, ChanSpacing.m)
+        .padding(.vertical, ChanSpacing.s)
+        .background(.bar)
     }
 }
