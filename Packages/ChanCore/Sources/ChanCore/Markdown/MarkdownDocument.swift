@@ -310,38 +310,42 @@ public enum MarkdownDocument {
             }
 
             if character == "*" || character == "_" {
-                let usable = character == "*" || underscoreIsMarker(at: index)
-                if usable {
-                    let count = runLength(of: character, at: index)
-                    let consumed = text.index(index, offsetBy: count)
+                let count = runLength(of: character, at: index)
+                let consumed = text.index(index, offsetBy: count)
 
-                    // Anything already open is closed by this run before a new
-                    // one is opened. Flushing first is what keeps the buffered
-                    // text on the style that was in force while it was read.
-                    if count >= 2, bold {
-                        flush()
-                        bold = false
-                        if count >= 3 { italic = false }
-                        index = consumed
-                        continue
+                // Anything already open is closed by this run before a new one is
+                // opened. Flushing first is what keeps the buffered text on the
+                // style that was in force while it was read.
+                //
+                // Closing needs no boundary test either: the character before a
+                // closing `_` is a letter by definition.
+                if count >= 2, bold {
+                    flush()
+                    bold = false
+                    if count >= 3 { italic = false }
+                    index = consumed
+                    continue
+                }
+                if count == 1, italic {
+                    flush()
+                    italic = false
+                    index = consumed
+                    continue
+                }
+
+                // Opening. `_` only marks emphasis at a word boundary here, so
+                // identifiers such as `saved_media` survive intact.
+                let mayOpen = character == "*" || underscoreIsMarker(at: index)
+                if mayOpen, hasCloser(character, from: consumed) {
+                    flush()
+                    if count >= 2 {
+                        bold = true
+                        if count >= 3 { italic = true }
+                    } else {
+                        italic = true
                     }
-                    if count == 1, italic {
-                        flush()
-                        italic = false
-                        index = consumed
-                        continue
-                    }
-                    if hasCloser(character, from: consumed) {
-                        flush()
-                        if count >= 2 {
-                            bold = true
-                            if count >= 3 { italic = true }
-                        } else {
-                            italic = true
-                        }
-                        index = consumed
-                        continue
-                    }
+                    index = consumed
+                    continue
                 }
             }
 
