@@ -109,7 +109,7 @@ jobs:
           xcodebuild \
             -project Ch4ios.xcodeproj \
             -scheme Ch4ios \
-            -configuration Debug \
+            -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             clean build \
@@ -117,13 +117,13 @@ jobs:
 
       - name: Verify deployment target
         run: |
-          APP="build/Build/Products/Debug-iphoneos/Ch4ios.app"
+          APP="build/Build/Products/Release-iphoneos/Ch4ios.app"
           test -d "$APP"
           echo "MinimumOSVersion: $(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist")"
 
       - name: Package unsigned .ipa
         run: |
-          APP="build/Build/Products/Debug-iphoneos/Ch4ios.app"
+          APP="build/Build/Products/Release-iphoneos/Ch4ios.app"
           rm -rf Payload Ch4ios.ipa
           mkdir -p Payload
           cp -R "$APP" Payload/
